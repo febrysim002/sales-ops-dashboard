@@ -34,14 +34,29 @@
   .card h2{margin:0 0 12px;font-size:15px;font-weight:600;}
   .card .chart-wrap{position:relative;height:280px;}
   .card.wide{grid-column:1 / -1;}
+  .card h2 .note{font-weight:400;color:var(--muted);font-size:11px;margin-left:6px;}
+  .filter-bar{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;}
+  .filter-group{display:flex;flex-direction:column;gap:4px;}
+  .filter-group.grow{flex:1;min-width:200px;}
+  .filter-group label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .filter-group select, .filter-group input{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;color:var(--text);}
+  .filter-group input{width:100%;}
+  #resetFilters{background:#fff;border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:6px;font-size:13px;cursor:pointer;}
+  #resetFilters:hover{background:#f3f4f6;}
+  #filterSummary{font-size:12px;color:var(--muted);width:100%;}
   section.raw{margin-top:32px;}
   section.raw h2{font-size:16px;margin-bottom:12px;}
   details{background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;}
   summary{padding:12px 16px;cursor:pointer;font-weight:600;font-size:13px;}
+  .table-toolbar{padding:0 16px 10px;}
+  .table-search{width:100%;max-width:280px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;}
   .table-wrap{overflow-x:auto;padding:0 16px 16px;}
   table{border-collapse:collapse;width:100%;font-size:12.5px;}
   th,td{padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
-  th{background:#f9fafb;color:var(--muted);font-weight:600;}
+  th{background:#f9fafb;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;}
+  th.sortable::after{content:'\2195';color:#c1c7d0;margin-left:5px;font-size:10px;}
+  th.sort-asc::after{content:'\2191';color:var(--blue);}
+  th.sort-desc::after{content:'\2193';color:var(--blue);}
   footer{text-align:center;color:var(--muted);font-size:12px;padding:24px;}
 </style>
 </head>
@@ -59,6 +74,23 @@
   <div id="status" class="loading">Fetching latest data from Google Sheets…</div>
 
   <div id="dashboard">
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label for="monthFrom">Month from</label>
+        <select id="monthFrom"></select>
+      </div>
+      <div class="filter-group">
+        <label for="monthTo">Month to</label>
+        <select id="monthTo"></select>
+      </div>
+      <div class="filter-group grow">
+        <label for="buyerSearch">Buyer search</label>
+        <input type="text" id="buyerSearch" placeholder="Type a buyer name, or click a bar in a buyer chart…">
+      </div>
+      <button id="resetFilters" type="button">Reset filters</button>
+      <div id="filterSummary"></div>
+    </div>
+
     <div class="kpi-grid">
       <div class="kpi"><div class="label">Total SO Value 2026 (YTD)</div><div class="value" id="kpiTotal2026">–</div><div class="sub" id="kpiTotal2026Sub"></div></div>
       <div class="kpi"><div class="label">YoY Growth (same months)</div><div class="value" id="kpiYoy">–</div><div class="sub">2026 YTD vs 2025 same period</div></div>
@@ -70,11 +102,11 @@
 
     <div class="chart-grid">
       <div class="card wide">
-        <h2>Monthly SO Value (2025 vs 2026) vs Ontime Delivery %</h2>
+        <h2>Monthly SO Value (2025 vs 2026) vs Ontime Delivery %<span class="note">(click a bar to filter by that month)</span></h2>
         <div class="chart-wrap"><canvas id="chartCombo"></canvas></div>
       </div>
       <div class="card">
-        <h2>Cumulative SO Value — 2025 vs 2026</h2>
+        <h2>Cumulative SO Value — 2025 vs 2026<span class="note">(always full year)</span></h2>
         <div class="chart-wrap"><canvas id="chartCumulative"></canvas></div>
       </div>
       <div class="card">
@@ -86,15 +118,15 @@
         <div class="chart-wrap"><canvas id="chartAging"></canvas></div>
       </div>
       <div class="card">
-        <h2>Top Buyers by 2026 Value</h2>
+        <h2>Top Buyers by 2026 Value<span class="note">(click a bar to filter by buyer)</span></h2>
         <div class="chart-wrap"><canvas id="chartBuyers"></canvas></div>
       </div>
       <div class="card">
-        <h2>Late Delivery Duration by Month</h2>
+        <h2>Late Delivery Duration by Month<span class="note">(click a bar to filter by that month)</span></h2>
         <div class="chart-wrap"><canvas id="chartLateByMonth"></canvas></div>
       </div>
       <div class="card">
-        <h2>Late Delivery Duration by Buyer</h2>
+        <h2>Late Delivery Duration by Buyer<span class="note">(click a bar to filter by buyer)</span></h2>
         <div class="chart-wrap"><canvas id="chartLateByBuyer"></canvas></div>
       </div>
     </div>
@@ -176,29 +208,85 @@ function alignSeries(labels, map, zeroAsNull){
 
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
 
-function renderRawTable(container, title, headers, rows){
+const tableUIState = {};
+
+function renderRawTable(container, id, title, headers, rows){
+  const state = tableUIState[id] || (tableUIState[id] = { search:'', sortCol:null, sortDir:1, open:false });
+
   const details = document.createElement('details');
+  details.open = state.open;
+  details.addEventListener('toggle', ()=>{ state.open = details.open; });
+
   const summary = document.createElement('summary');
-  summary.textContent = title + ' (' + rows.length + ' rows)';
   details.appendChild(summary);
+
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'table-toolbar';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'table-search';
+  searchInput.placeholder = 'Search this table…';
+  searchInput.value = state.search;
+  searchInput.addEventListener('click', e=>e.stopPropagation());
+  searchInput.addEventListener('input', ()=>{ state.search = searchInput.value; renderBody(); });
+  toolbar.appendChild(searchInput);
+
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const trh = document.createElement('tr');
-  headers.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; trh.appendChild(th); });
+  headers.forEach(h=>{
+    const th=document.createElement('th');
+    th.textContent = h;
+    th.classList.add('sortable');
+    th.addEventListener('click', ()=>{
+      if(state.sortCol===h) state.sortDir *= -1; else { state.sortCol=h; state.sortDir=1; }
+      renderBody();
+    });
+    trh.appendChild(th);
+  });
   thead.appendChild(trh);
   table.appendChild(thead);
   const tbody = document.createElement('tbody');
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    headers.forEach(h=>{ const td=document.createElement('td'); td.textContent=(r[h]||'').toString().trim(); tr.appendChild(td); });
-    tbody.appendChild(tr);
-  });
   table.appendChild(tbody);
+
+  wrap.appendChild(toolbar);
   wrap.appendChild(table);
   details.appendChild(wrap);
   container.appendChild(details);
+
+  function renderBody(){
+    let displayRows = rows;
+    const q = state.search.trim().toLowerCase();
+    if(q){
+      displayRows = displayRows.filter(r => headers.some(h => (r[h]||'').toString().toLowerCase().includes(q)));
+    }
+    if(state.sortCol){
+      const col = state.sortCol;
+      displayRows = [...displayRows].sort((a,b)=>{
+        const av = a[col], bv = b[col];
+        const an = toNum(av), bn = toNum(bv);
+        const bothNumeric = String(av||'').trim()!=='' && String(bv||'').trim()!=='' && !isNaN(an) && !isNaN(bn);
+        const cmp = bothNumeric ? (an-bn) : String(av||'').localeCompare(String(bv||''));
+        return cmp * state.sortDir;
+      });
+    }
+    headers.forEach((h,i)=>{
+      const th = trh.children[i];
+      th.classList.toggle('sort-asc', state.sortCol===h && state.sortDir===1);
+      th.classList.toggle('sort-desc', state.sortCol===h && state.sortDir===-1);
+    });
+    tbody.innerHTML = '';
+    displayRows.forEach(r=>{
+      const tr = document.createElement('tr');
+      headers.forEach(h=>{ const td=document.createElement('td'); td.textContent=(r[h]||'').toString().trim(); tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
+    summary.textContent = title + ' (' + displayRows.length + (displayRows.length!==rows.length ? ' of ' + rows.length : '') + ' rows)';
+  }
+  renderBody();
 }
 
 function newChart(canvasId, config){
@@ -208,7 +296,10 @@ function newChart(canvasId, config){
   return new Chart(canvas, config);
 }
 
-function buildDashboard(grid){
+let DATA = null;
+const filters = { monthFrom: 0, monthTo: Infinity, buyer: '' };
+
+function prepareData(grid){
   const soValue    = extractTable(grid, ['Month Final','Month','2025 ($)','2026 ($)'], 0);
   const soAkum     = extractTable(grid, ['Month Final - Akumulasi','Month','2025 ($)','2026 ($)'], 0);
   const ontime     = extractTable(grid, ['Month Final','Year','Month','Late','Ontime','Ontime %'], 5);
@@ -217,16 +308,91 @@ function buildDashboard(grid){
   const buyers     = extractTable(grid, ['Buyer','Buyer Name','SUM of  2025 ($)','2026 ($)'], 0);
   const lateByMonth= extractTable(grid, ['Month Final','Month','>2Months','1Month','1Week','2Months','2Weeks'], 5);
   const lateByBuyer= extractTable(grid, ['Buyer Name','1Month','1Week','2Weeks','Grand Total'], 6);
+  const monthOrder = soValue.rows.map(r=>cleanMonth(r['Month Final']));
+  return { soValue, soAkum, ontime, pipeline, arAging, buyers, lateByMonth, lateByBuyer, monthOrder };
+}
 
-  // ---- KPIs ----
-  const total2026 = sum(soValue.rows.map(r=>toNum(r['2026 ($)'])));
-  const ytdRows = soValue.rows.filter(r=>toNum(r['2026 ($)'])>0);
+function monthIdx(label){
+  const i = DATA.monthOrder.indexOf(cleanMonth(label));
+  return i;
+}
+function byMonthRange(rows, field){
+  return rows.filter(r=>{
+    const i = monthIdx(r[field]);
+    return i===-1 ? true : (i>=filters.monthFrom && i<=filters.monthTo);
+  });
+}
+function byBuyer(rows, field){
+  if(!filters.buyer) return rows;
+  const q = filters.buyer.toLowerCase();
+  return rows.filter(r=>String(r[field]||'').toLowerCase().includes(q));
+}
+
+function populateMonthFilterOptions(){
+  const fromSel = document.getElementById('monthFrom');
+  const toSel = document.getElementById('monthTo');
+  fromSel.innerHTML = '';
+  toSel.innerHTML = '';
+  DATA.monthOrder.forEach((m,i)=>{
+    const o1 = document.createElement('option'); o1.value=i; o1.textContent=m; fromSel.appendChild(o1);
+    const o2 = document.createElement('option'); o2.value=i; o2.textContent=m; toSel.appendChild(o2);
+  });
+  fromSel.value = 0;
+  toSel.value = DATA.monthOrder.length-1;
+  filters.monthFrom = 0;
+  filters.monthTo = DATA.monthOrder.length-1;
+}
+
+function setMonthFilter(fromIdx, toIdx){
+  if(fromIdx>toIdx){ const t=fromIdx; fromIdx=toIdx; toIdx=t; }
+  filters.monthFrom = fromIdx;
+  filters.monthTo = toIdx;
+  document.getElementById('monthFrom').value = fromIdx;
+  document.getElementById('monthTo').value = toIdx;
+  // Deferred: chart click handlers call this from inside Chart.js's own event
+  // dispatch, and newChart() destroys/recreates the chart being clicked —
+  // doing that synchronously crashes Chart.js's in-flight event handling.
+  setTimeout(render, 0);
+}
+function setBuyerFilter(name){
+  filters.buyer = name;
+  document.getElementById('buyerSearch').value = name;
+  setTimeout(render, 0);
+}
+
+function updateFilterSummary(){
+  const parts = [];
+  if(filters.monthFrom>0 || filters.monthTo<DATA.monthOrder.length-1){
+    parts.push('Months: ' + DATA.monthOrder[filters.monthFrom] + '–' + DATA.monthOrder[filters.monthTo]);
+  }
+  if(filters.buyer) parts.push('Buyer contains "' + filters.buyer + '"');
+  document.getElementById('filterSummary').textContent = parts.length
+    ? 'Active filters — ' + parts.join(' · ') + ' (affects time-series and buyer charts/tables respectively)'
+    : '';
+}
+
+function render(){
+  const { soValue, soAkum, ontime, pipeline, arAging, buyers, lateByMonth, lateByBuyer } = DATA;
+  updateFilterSummary();
+
+  const soValueF = byMonthRange(soValue.rows, 'Month Final');
+  const ontimeF = byMonthRange(ontime.rows, 'Month Final');
+  const pipelineF = byMonthRange(pipeline.rows, 'Month');
+  const lateByMonthF = byMonthRange(lateByMonth.rows, 'Month Final');
+  const buyersF = byBuyer(buyers.rows, 'Buyer Name');
+  const lateByBuyerNoTotal = lateByBuyer.rows.filter(r=>String(r['Buyer Name']).trim().toLowerCase()!=='grand total');
+  const lateByBuyerF = byBuyer(lateByBuyerNoTotal, 'Buyer Name');
+  const lateGrandTotalRow = lateByBuyer.rows.find(r=>String(r['Buyer Name']).trim().toLowerCase()==='grand total');
+
+  // ---- KPIs (SO value / YoY / Ontime% honor the month filter; AR, top buyer and late count stay all-time/all-buyer) ----
+  const total2026 = sum(soValueF.map(r=>toNum(r['2026 ($)'])));
+  const ytdRows = soValueF.filter(r=>toNum(r['2026 ($)'])>0);
   const ytd2026 = sum(ytdRows.map(r=>toNum(r['2026 ($)'])));
   const ytd2025Same = sum(ytdRows.map(r=>toNum(r['2025 ($)'])));
   const yoyPct = ytd2025Same>0 ? ((ytd2026-ytd2025Same)/ytd2025Same*100) : null;
 
-  const totalOntime = sum(ontime.rows.map(r=>toNum(r['Ontime'])));
-  const totalLate = sum(ontime.rows.map(r=>toNum(r['Late'])));
+  const totalOntime = sum(ontimeF.map(r=>toNum(r['Ontime'])));
+  const totalLate = sum(ontimeF.map(r=>toNum(r['Late'])));
   const ontimePct = (totalOntime+totalLate)>0 ? totalOntime/(totalOntime+totalLate)*100 : null;
 
   const arGrandTotal = arAging.rows.find(r=>String(r['Key']).trim().toLowerCase()==='grand total');
@@ -236,9 +402,8 @@ function buildDashboard(grid){
   let topBuyer = null;
   buyers.rows.forEach(r=>{ const v=toNum(r['2026 ($)']); if(!topBuyer||v>topBuyer.v) topBuyer={name:r['Buyer Name'],v}; });
 
-  const lateGrandTotal = lateByBuyer.rows.find(r=>String(r['Buyer Name']).trim().toLowerCase()==='grand total');
-  const totalLateOrders = lateGrandTotal ? toNum(lateGrandTotal['Grand Total'])
-    : sum(lateByBuyer.rows.filter(r=>String(r['Buyer Name']).trim().toLowerCase()!=='grand total').map(r=>toNum(r['Grand Total'])));
+  const totalLateOrders = lateGrandTotalRow ? toNum(lateGrandTotalRow['Grand Total'])
+    : sum(lateByBuyerNoTotal.map(r=>toNum(r['Grand Total'])));
 
   document.getElementById('kpiTotal2026').textContent = fmtUSDCompact.format(total2026);
   document.getElementById('kpiTotal2026Sub').textContent = fmtUSD.format(total2026);
@@ -252,12 +417,12 @@ function buildDashboard(grid){
   document.getElementById('kpiTopBuyerSub').textContent = topBuyer ? topBuyer.name : '';
   document.getElementById('kpiLateCount').textContent = totalLateOrders;
 
-  // ---- Chart 1: Combo SO Value + Ontime % ----
+  // ---- Chart 1: Combo SO Value + Ontime % (month filtered, click a bar to drill into that month) ----
   {
-    const labels = soValue.rows.map(r=>cleanMonth(r['Month Final']));
-    const so2025 = soValue.rows.map(r=>toNum(r['2025 ($)']));
-    const so2026 = soValue.rows.map(r=>toNum(r['2026 ($)'])).map(v=>v>0?v:null);
-    const ontimeSeries = alignSeries(labels, seriesMap(ontime.rows,'Month Final','Ontime %'));
+    const labels = soValueF.map(r=>cleanMonth(r['Month Final']));
+    const so2025 = soValueF.map(r=>toNum(r['2025 ($)']));
+    const so2026 = soValueF.map(r=>toNum(r['2026 ($)'])).map(v=>v>0?v:null);
+    const ontimeSeries = alignSeries(labels, seriesMap(ontimeF,'Month Final','Ontime %'));
     newChart('chartCombo', {
       data: {
         labels,
@@ -270,6 +435,8 @@ function buildDashboard(grid){
       options: {
         responsive:true, maintainAspectRatio:false,
         interaction:{ mode:'index', intersect:false },
+        onClick:(evt, els)=>{ if(els.length){ const i=els[0].index; setMonthFilter(monthIdx(labels[i]), monthIdx(labels[i])); } },
+        onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         scales:{
           y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } },
           y1:{ position:'right', beginAtZero:true, max:100, grid:{drawOnChartArea:false}, ticks:{ callback:v=>v+'%' } }
@@ -282,7 +449,7 @@ function buildDashboard(grid){
     });
   }
 
-  // ---- Chart 2: Cumulative SO value ----
+  // ---- Chart 2: Cumulative SO value (always full year) ----
   {
     const labels = soAkum.rows.map(r=>cleanMonth(r['Month Final - Akumulasi']));
     newChart('chartCumulative', {
@@ -298,13 +465,13 @@ function buildDashboard(grid){
     });
   }
 
-  // ---- Chart 3: Actual vs Forecast pipeline ----
+  // ---- Chart 3: Actual vs Forecast pipeline (month filtered) ----
   {
-    const labels = pipeline.rows.map(r=>cleanMonth(r['Month']));
-    const actual = alignSeries(labels, seriesMap(soValue.rows,'Month Final','2026 ($)'), true);
-    const permonth = pipeline.rows.map(r=>toNum(r['Permonth']));
-    const ahead3 = pipeline.rows.map(r=>toNum(r['3 Months ahead']));
-    const ahead4 = pipeline.rows.map(r=>toNum(r['4 Months ahead']));
+    const labels = pipelineF.map(r=>cleanMonth(r['Month']));
+    const actual = alignSeries(labels, seriesMap(soValueF,'Month Final','2026 ($)'), true);
+    const permonth = pipelineF.map(r=>toNum(r['Permonth']));
+    const ahead3 = pipelineF.map(r=>toNum(r['3 Months ahead']));
+    const ahead4 = pipelineF.map(r=>toNum(r['4 Months ahead']));
     newChart('chartPipeline', {
       type:'line',
       data:{ labels, datasets:[
@@ -320,7 +487,7 @@ function buildDashboard(grid){
     });
   }
 
-  // ---- Chart 4: AR Aging ----
+  // ---- Chart 4: AR Aging (always full) ----
   {
     const rows = arAging.rows.filter(r=>String(r['Key']).trim().toLowerCase()!=='grand total');
     newChart('chartAging', {
@@ -335,62 +502,67 @@ function buildDashboard(grid){
     });
   }
 
-  // ---- Chart 5: Top buyers ----
+  // ---- Chart 5: Top buyers (buyer filtered, click a bar to filter by that buyer) ----
   {
-    const rows = [...buyers.rows].sort((a,b)=>toNum(b['2026 ($)'])-toNum(a['2026 ($)']));
+    const rows = [...buyersF].sort((a,b)=>toNum(b['2026 ($)'])-toNum(a['2026 ($)']));
     newChart('chartBuyers', {
       type:'bar',
       data:{ labels: rows.map(r=>r['Buyer Name']), datasets:[
         { label:'2026 ($)', data: rows.map(r=>toNum(r['2026 ($)'])), backgroundColor:PALETTE.blue }
       ]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        onClick:(evt, els)=>{ if(els.length) setBuyerFilter(rows[els[0].index]['Buyer Name']); },
+        onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } } },
         scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
       }
     });
   }
 
-  // ---- Chart 6: Late duration by month (stacked) ----
+  // ---- Chart 6: Late duration by month (stacked, month filtered, click a bar to drill into that month) ----
   {
-    const labels = lateByMonth.rows.map(r=>cleanMonth(r['Month Final']));
+    const labels = lateByMonthF.map(r=>cleanMonth(r['Month Final']));
     const cats = ['>2Months','1Month','1Week','2Months','2Weeks'];
     const colors = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.violet, PALETTE.teal];
     newChart('chartLateByMonth', {
       type:'bar',
-      data:{ labels, datasets: cats.map((c,i)=>({ label:c, data: lateByMonth.rows.map(r=>toNum(r[c])), backgroundColor: colors[i] })) },
+      data:{ labels, datasets: cats.map((c,i)=>({ label:c, data: lateByMonthF.map(r=>toNum(r[c])), backgroundColor: colors[i] })) },
       options:{ responsive:true, maintainAspectRatio:false,
+        onClick:(evt, els)=>{ if(els.length){ const i=els[0].index; setMonthFilter(monthIdx(labels[i]), monthIdx(labels[i])); } },
+        onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } }
       }
     });
   }
 
-  // ---- Chart 7: Late duration by buyer ----
+  // ---- Chart 7: Late duration by buyer (buyer filtered, click a bar to filter by that buyer) ----
   {
-    const rows = lateByBuyer.rows
-      .filter(r=>String(r['Buyer Name']).trim().toLowerCase()!=='grand total')
-      .sort((a,b)=>toNum(b['Grand Total'])-toNum(a['Grand Total']));
+    const rows = [...lateByBuyerF].sort((a,b)=>toNum(b['Grand Total'])-toNum(a['Grand Total']));
     newChart('chartLateByBuyer', {
       type:'bar',
       data:{ labels: rows.map(r=>r['Buyer Name']), datasets:[
         { label:'Late Orders', data: rows.map(r=>toNum(r['Grand Total'])), backgroundColor:PALETTE.rose }
       ]},
       options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        onClick:(evt, els)=>{ if(els.length) setBuyerFilter(rows[els[0].index]['Buyer Name']); },
+        onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         plugins:{ legend:{display:false} },
         scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
       }
     });
   }
 
-  // ---- Raw tables ----
+  // ---- Raw tables (search + sort built into renderRawTable; rows reflect current filters) ----
   const rawContainer = document.getElementById('rawTables');
-  renderRawTable(rawContainer, '1. Monthly SO Value', soValue.headers, soValue.rows);
-  renderRawTable(rawContainer, '1b. Cumulative SO Value (Akumulasi)', soAkum.headers, soAkum.rows);
-  renderRawTable(rawContainer, '2. Ontime Delivery', ontime.headers, ontime.rows);
-  renderRawTable(rawContainer, '3. Sales 3 & 4 Months Ahead', pipeline.headers, pipeline.rows);
-  renderRawTable(rawContainer, '4. AR Open Aging', arAging.headers, arAging.rows);
-  renderRawTable(rawContainer, '5. Buyers (2025 vs 2026)', buyers.headers, buyers.rows);
-  renderRawTable(rawContainer, '6. Late Delivery Duration by Month', lateByMonth.headers, lateByMonth.rows);
-  renderRawTable(rawContainer, '7. Late Delivery Duration by Buyer', lateByBuyer.headers, lateByBuyer.rows);
+  rawContainer.innerHTML = '';
+  renderRawTable(rawContainer, 'soValue', '1. Monthly SO Value', soValue.headers, soValueF);
+  renderRawTable(rawContainer, 'soAkum', '1b. Cumulative SO Value (Akumulasi)', soAkum.headers, soAkum.rows);
+  renderRawTable(rawContainer, 'ontime', '2. Ontime Delivery', ontime.headers, ontimeF);
+  renderRawTable(rawContainer, 'pipeline', '3. Sales 3 & 4 Months Ahead', pipeline.headers, pipelineF);
+  renderRawTable(rawContainer, 'arAging', '4. AR Open Aging', arAging.headers, arAging.rows);
+  renderRawTable(rawContainer, 'buyers', '5. Buyers (2025 vs 2026)', buyers.headers, buyersF);
+  renderRawTable(rawContainer, 'lateByMonth', '6. Late Delivery Duration by Month', lateByMonth.headers, lateByMonthF);
+  renderRawTable(rawContainer, 'lateByBuyer', '7. Late Delivery Duration by Buyer', lateByBuyer.headers, lateGrandTotalRow ? [...lateByBuyerF, lateGrandTotalRow] : lateByBuyerF);
 }
 
 const PROXY_URL = 'sheet.csv';
@@ -451,7 +623,11 @@ function loadData(){
     })
     .then(function(grid){
       try{
-        buildDashboard(grid);
+        DATA = prepareData(grid);
+        populateMonthFilterOptions();
+        filters.buyer = '';
+        document.getElementById('buyerSearch').value = '';
+        render();
         statusEl.style.display = 'none';
         dashEl.style.display = 'block';
         document.getElementById('refreshedAt').textContent = 'Last refreshed: ' + new Date().toLocaleString();
@@ -468,6 +644,25 @@ function loadData(){
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
+document.getElementById('monthFrom').addEventListener('change', e=>{
+  if(!DATA) return;
+  setMonthFilter(parseInt(e.target.value,10), filters.monthTo < parseInt(e.target.value,10) ? parseInt(e.target.value,10) : filters.monthTo);
+});
+document.getElementById('monthTo').addEventListener('change', e=>{
+  if(!DATA) return;
+  setMonthFilter(filters.monthFrom > parseInt(e.target.value,10) ? parseInt(e.target.value,10) : filters.monthFrom, parseInt(e.target.value,10));
+});
+document.getElementById('buyerSearch').addEventListener('input', e=>{
+  if(!DATA) return;
+  filters.buyer = e.target.value;
+  render();
+});
+document.getElementById('resetFilters').addEventListener('click', ()=>{
+  if(!DATA) return;
+  filters.buyer = '';
+  document.getElementById('buyerSearch').value = '';
+  setMonthFilter(0, DATA.monthOrder.length-1);
+});
 loadData();
 </script>
 </body>
