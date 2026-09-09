@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sales &amp; Operations Dashboard</title>
+<title>Sales Ops Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -49,7 +49,7 @@
 
 <header>
   <div>
-    <h1>Sales &amp; Operations Dashboard</h1>
+    <h1>Sales Ops Dashboard</h1>
     <p id="refreshedAt">Loading live data…</p>
   </div>
   <button id="refreshBtn">Refresh Now</button>
@@ -195,6 +195,13 @@ function renderRawTable(container, title, headers, rows){
   container.appendChild(details);
 }
 
+function newChart(canvasId, config){
+  const canvas = document.getElementById(canvasId);
+  const existing = Chart.getChart(canvas);
+  if(existing) existing.destroy();
+  return new Chart(canvas, config);
+}
+
 function buildDashboard(grid){
   const soValue    = extractTable(grid, ['Month Final','Month','2025 ($)','2026 ($)'], 0);
   const soAkum     = extractTable(grid, ['Month Final - Akumulasi','Month','2025 ($)','2026 ($)'], 0);
@@ -245,7 +252,7 @@ function buildDashboard(grid){
     const so2025 = soValue.rows.map(r=>toNum(r['2025 ($)']));
     const so2026 = soValue.rows.map(r=>toNum(r['2026 ($)'])).map(v=>v>0?v:null);
     const ontimeSeries = alignSeries(labels, seriesMap(ontime.rows,'Month Final','Ontime %'));
-    new Chart(document.getElementById('chartCombo'), {
+    newChart('chartCombo', {
       data: {
         labels,
         datasets: [
@@ -272,7 +279,7 @@ function buildDashboard(grid){
   // ---- Chart 2: Cumulative SO value ----
   {
     const labels = soAkum.rows.map(r=>cleanMonth(r['Month Final - Akumulasi']));
-    new Chart(document.getElementById('chartCumulative'), {
+    newChart('chartCumulative', {
       type:'line',
       data:{ labels, datasets:[
         { label:'2025', data:soAkum.rows.map(r=>toNum(r['2025 ($)'])), borderColor:PALETTE.slate, backgroundColor:PALETTE.slate, tension:.25 },
@@ -292,7 +299,7 @@ function buildDashboard(grid){
     const permonth = pipeline.rows.map(r=>toNum(r['Permonth']));
     const ahead3 = pipeline.rows.map(r=>toNum(r['3 Months ahead']));
     const ahead4 = pipeline.rows.map(r=>toNum(r['4 Months ahead']));
-    new Chart(document.getElementById('chartPipeline'), {
+    newChart('chartPipeline', {
       type:'line',
       data:{ labels, datasets:[
         { label:'Actual 2026', data:actual, borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, borderWidth:3, spanGaps:false, tension:.2 },
@@ -310,7 +317,7 @@ function buildDashboard(grid){
   // ---- Chart 4: AR Aging ----
   {
     const rows = arAging.rows.filter(r=>String(r['Key']).trim().toLowerCase()!=='grand total');
-    new Chart(document.getElementById('chartAging'), {
+    newChart('chartAging', {
       type:'bar',
       data:{ labels: rows.map(r=>r['Key']), datasets:[
         { label:'Balance Due', data: rows.map(r=>toNum(r['SUM of Balance Due'])), backgroundColor: rows.map((_,i)=>`hsl(${10+i*16},70%,50%)`) }
@@ -325,7 +332,7 @@ function buildDashboard(grid){
   // ---- Chart 5: Top buyers ----
   {
     const rows = [...buyers.rows].sort((a,b)=>toNum(b['2026 ($)'])-toNum(a['2026 ($)']));
-    new Chart(document.getElementById('chartBuyers'), {
+    newChart('chartBuyers', {
       type:'bar',
       data:{ labels: rows.map(r=>r['Buyer Name']), datasets:[
         { label:'2026 ($)', data: rows.map(r=>toNum(r['2026 ($)'])), backgroundColor:PALETTE.blue }
@@ -342,7 +349,7 @@ function buildDashboard(grid){
     const labels = lateByMonth.rows.map(r=>cleanMonth(r['Month Final']));
     const cats = ['>2Months','1Month','1Week','2Months','2Weeks'];
     const colors = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.violet, PALETTE.teal];
-    new Chart(document.getElementById('chartLateByMonth'), {
+    newChart('chartLateByMonth', {
       type:'bar',
       data:{ labels, datasets: cats.map((c,i)=>({ label:c, data: lateByMonth.rows.map(r=>toNum(r[c])), backgroundColor: colors[i] })) },
       options:{ responsive:true, maintainAspectRatio:false,
@@ -356,7 +363,7 @@ function buildDashboard(grid){
     const rows = lateByBuyer.rows
       .filter(r=>String(r['Buyer Name']).trim().toLowerCase()!=='grand total')
       .sort((a,b)=>toNum(b['Grand Total'])-toNum(a['Grand Total']));
-    new Chart(document.getElementById('chartLateByBuyer'), {
+    newChart('chartLateByBuyer', {
       type:'bar',
       data:{ labels: rows.map(r=>r['Buyer Name']), datasets:[
         { label:'Late Orders', data: rows.map(r=>toNum(r['Grand Total'])), backgroundColor:PALETTE.rose }
