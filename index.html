@@ -106,9 +106,15 @@
   </div>
 </main>
 
-<footer>Data source: published Google Sheet (CSV) · Re-fetched on every page load</footer>
+<footer>Data source: live Google Sheet (Sheets API) · Re-fetched on every page load</footer>
 
 <script>
+const SHEETS_API_KEY = "AIzaSyAaUlrdR43v7CgwqbeMf3p0yGzb07OhMcg";
+const SPREADSHEET_ID = "1m-2znh_9e_UHtuwTheWPpytuEZcKY88OaGngVAlBoFw";
+const SHEET_RANGE = "Summary!A1:AD100";
+const SHEETS_API_URL = "https://sheets.googleapis.com/v4/spreadsheets/" + SPREADSHEET_ID + "/values/" + encodeURIComponent(SHEET_RANGE) + "?key=" + SHEETS_API_KEY;
+
+// Fallback data source, used only if the Sheets API call fails.
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTHzn77J2xBJtuPT3I_umOpYNuJHWY3b2Sz_eN-V6z8YYFm7qhQt2ppQbInhTcNIuEiZUUjJfIrmfzx/pub?gid=1347234845&single=true&output=csv";
 
 const fmtUSD = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
@@ -393,9 +399,10 @@ function showFetchError(detail){
   const statusEl = document.getElementById('status');
   statusEl.className = 'error';
   statusEl.innerHTML =
-    '<strong>Could not fetch the Google Sheet CSV (direct fetch and local proxy both failed).</strong><br>' +
+    '<strong>Could not load data (Sheets API and CSV fallback both failed).</strong><br>' +
     'Reason: ' + detail + '<br><br>' +
     'Things to check:<br>' +
+    '&bull; Is the Sheets API key still valid and unrestricted for this origin? Check APIs &amp; Services → Credentials in Google Cloud Console.<br>' +
     '&bull; Is <code>proxy_server.py</code> running? Start it from this folder with <code>python proxy_server.py</code>, then open <code>http://localhost:8000/dashboard.html</code>.<br>' +
     '&bull; Open <a href="' + CSV_URL + '" target="_blank" rel="noopener">the CSV link</a> directly in this browser to confirm the sheet is still published.<br>' +
     '&bull; Press F12 → Network tab, click Refresh Now, and check the failed request\'s status for a "net::ERR_..." reason.';
@@ -409,6 +416,26 @@ function tryFetch(url){
   });
 }
 
+function fetchViaSheetsApi(){
+  return fetch(SHEETS_API_URL, { cache: 'no-store' }).then(function(res){
+    return res.json().then(function(json){
+      if(!res.ok) throw new Error((json.error && json.error.message) || ('HTTP ' + res.status));
+      return json.values || [];
+    });
+  });
+}
+
+function fetchViaCsvFallback(){
+  return tryFetch(CSV_URL)
+    .catch(function(directErr){
+      console.warn('Direct CSV fetch failed, falling back to local proxy (sheet.csv):', directErr);
+      return tryFetch(PROXY_URL);
+    })
+    .then(function(csvText){
+      return Papa.parse(csvText, { skipEmptyLines: false }).data;
+    });
+}
+
 function loadData(){
   const statusEl = document.getElementById('status');
   const dashEl = document.getElementById('dashboard');
@@ -417,13 +444,12 @@ function loadData(){
   statusEl.style.display = 'block';
   dashEl.style.display = 'none';
 
-  tryFetch(CSV_URL)
-    .catch(function(directErr){
-      console.warn('Direct fetch failed, falling back to local proxy (sheet.csv):', directErr);
-      return tryFetch(PROXY_URL);
+  fetchViaSheetsApi()
+    .catch(function(apiErr){
+      console.warn('Sheets API fetch failed, falling back to published CSV:', apiErr);
+      return fetchViaCsvFallback();
     })
-    .then(function(csvText){
-      const grid = Papa.parse(csvText, { skipEmptyLines: false }).data;
+    .then(function(grid){
       try{
         buildDashboard(grid);
         statusEl.style.display = 'none';
@@ -431,12 +457,12 @@ function loadData(){
         document.getElementById('refreshedAt').textContent = 'Last refreshed: ' + new Date().toLocaleString();
       }catch(e){
         statusEl.className = 'error';
-        statusEl.textContent = 'Loaded the CSV but could not parse the expected table layout. Details: ' + e.message;
+        statusEl.textContent = 'Loaded the data but could not parse the expected table layout. Details: ' + e.message;
         console.error(e);
       }
     })
     .catch(function(err){
-      console.error('CSV fetch failed (direct and proxy):', err);
+      console.error('All data sources failed:', err);
       showFetchError(err.message || String(err));
     });
 }
