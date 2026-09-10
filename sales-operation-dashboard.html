@@ -52,6 +52,9 @@
   .raw-head h2{margin-bottom:0;}
   .raw-head button{background:#fff;border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;}
   .raw-head button:hover{background:#f3f4f6;}
+  .raw-toggle{cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;}
+  .raw-arrow{display:inline-block;font-size:12px;transition:transform .15s;}
+  .raw-toggle.open .raw-arrow{transform:rotate(90deg);}
   details{background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;}
   summary{padding:12px 16px;cursor:pointer;font-weight:600;font-size:13px;}
   .table-toolbar{padding:0 16px 10px;}
@@ -261,10 +264,10 @@
 
     <section class="raw">
       <div class="raw-head">
-        <h2>Raw Data</h2>
+        <h2 id="rawSectionToggle" class="raw-toggle"><span class="raw-arrow">&#9654;</span> Raw Data</h2>
         <button type="button" id="collapseAllRaw">Collapse All</button>
       </div>
-      <div id="rawTables"></div>
+      <div id="rawTables" hidden></div>
     </section>
   </div>
 </main>
@@ -1278,6 +1281,11 @@ document.getElementById('refreshBtn').addEventListener('click', loadData);
 document.getElementById('collapseAllRaw').addEventListener('click', ()=>{
   document.querySelectorAll('#rawTables details').forEach(d=>{ d.open = false; });
   Object.keys(tableUIState).forEach(id=>{ tableUIState[id].open = false; });
+});
+document.getElementById('rawSectionToggle').addEventListener('click', ()=>{
+  const rawTables = document.getElementById('rawTables');
+  rawTables.hidden = !rawTables.hidden;
+  document.getElementById('rawSectionToggle').classList.toggle('open', !rawTables.hidden);
 });
 loadData();
 </script>
