@@ -979,6 +979,7 @@ function renderCumulative(){
       { label:'2026', data:rows.map(r=>r.y2026), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, tension:.25 }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
         tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
@@ -1107,10 +1108,12 @@ function renderLateByMonth(){
     type:'bar',
     data:{ labels, datasets: LATE_BUCKETS.map((c,i)=>({ label:c, data: rows.map(r=>r[c]), backgroundColor: BUCKET_COLORS[i] })) },
     options:{ responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('lateByMonthFrom','lateByMonthTo', lateByMonthFilter, lateByMonthFilter.from+els[0].index, renderLateByMonth); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } },
       plugins:{
+        tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+ctx.parsed.y } },
         datalabels:{
           display: ctx => LABELS.lateByMonth && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
