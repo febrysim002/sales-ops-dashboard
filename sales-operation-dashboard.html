@@ -176,7 +176,7 @@
       </div>
       <div class="card">
         <div class="card-head">
-          <h2>Total Sales by Month (2023–2026)</h2>
+          <h2>Total Sales by Month</h2>
           <div class="chart-filter">
             <select id="pipelineFrom"></select>
             <span class="sep">–</span>
@@ -522,31 +522,42 @@ function newChart(canvasId, config){
 // ---------------------------------------------------------------------
 
 function normalizeSoValue(rows){
-  // Columns: Year, Month, Buyer Code, Buyer Name, Sales Amount
+  // Columns: Year, Month, Buyer Code, Buyer Name, Sales Amount (plus whatever
+  // else the sheet has). Located by header name, not fixed position — the
+  // sheet has already had a column inserted in front of these once before.
+  const header = (rows[0]||[]).map(h=>String(h||'').trim().toLowerCase());
+  const cYear = header.indexOf('year'), cMonth = header.indexOf('month'),
+        cBuyer = header.indexOf('buyer name'), cAmount = header.indexOf('sales amount');
   const out = [];
   for(let i=1;i<rows.length;i++){
     const r = rows[i];
-    if(!r || r[0]===undefined) continue;
-    const year = String(r[0]||'').trim();
-    const month = parseInt(r[1],10);
+    if(!r || r[cYear]===undefined) continue;
+    const year = String(r[cYear]||'').trim();
+    const month = parseInt(r[cMonth],10);
     if((year!=='2025' && year!=='2026') || !month) continue;
-    out.push({ year, month, buyer:(r[3]||'').trim(), amount:toNum(r[4]) });
+    out.push({ year, month, buyer:(r[cBuyer]||'').trim(), amount:toNum(r[cAmount]) });
   }
   return out;
 }
 
 function normalizeOntime(rows){
-  // Columns: Year, Month, Cek, Final Status, Max Late, Late Dur, Late Days, SO_No, Buyer Code, Buyer Name, ...
+  // Columns: Year, Month, Cek, Final Status, Late Dur, SO_No, Buyer Name, plus
+  // whatever else the sheet has. Located by header name, not fixed position —
+  // the sheet has already had a column inserted in the middle once before.
+  const header = (rows[0]||[]).map(h=>String(h||'').trim().toLowerCase());
+  const cYear = header.indexOf('year'), cMonth = header.indexOf('month'), cCek = header.indexOf('cek'),
+        cStatus = header.indexOf('final status'), cBucket = header.indexOf('late dur'),
+        cSoNo = header.indexOf('so_no'), cBuyer = header.indexOf('buyer name');
   const out = [];
   for(let i=1;i<rows.length;i++){
     const r = rows[i];
-    if(!r || r[0]===undefined) continue;
-    if((r[2]||'').trim() !== 'Include') continue;
-    if(String(r[0]||'').trim() !== '2026') continue;
-    const month = parseInt(r[1],10);
-    const soNo = (r[7]||'').trim();
+    if(!r || r[cYear]===undefined) continue;
+    if((r[cCek]||'').trim() !== 'Include') continue;
+    if(String(r[cYear]||'').trim() !== '2026') continue;
+    const month = parseInt(r[cMonth],10);
+    const soNo = (r[cSoNo]||'').trim();
     if(!month || !soNo) continue;
-    out.push({ month, status:(r[3]||'').trim(), bucket:(r[5]||'').trim(), soNo, buyer:(r[9]||'').trim() });
+    out.push({ month, status:(r[cStatus]||'').trim(), bucket:(r[cBucket]||'').trim(), soNo, buyer:(r[cBuyer]||'').trim() });
   }
   return out;
 }
@@ -730,6 +741,25 @@ function pipelineSeries(pipeline, buyers){
   }
   const matched = pipeline.customerRows.filter(r=>matchesBuyer(r.buyer, buyers));
   return pipeline.labels.map((label,i)=>({ label, value: sum(matched.map(r=>r.values[i]||0)) }));
+}
+
+// Regroups the flat "Jan-23".."Dec-26" column series into one 12-month
+// (Jan..Dec) array per calendar year, so the chart can plot each year as
+// its own line on a Jan-Dec axis instead of one long multi-year timeline.
+const PIPELINE_MONTH_RE = /^([A-Za-z]{3})[\s-]\s*(\d{2,4})$/;
+function pipelineSeriesByYear(pipeline, buyers){
+  const flat = pipelineSeries(pipeline, buyers);
+  const byYear = {};
+  flat.forEach(({label, value})=>{
+    const m = PIPELINE_MONTH_RE.exec((label||'').trim());
+    if(!m) return;
+    const mi = MONTH_NAMES.findIndex(mn=>mn.toLowerCase()===m[1].toLowerCase());
+    if(mi===-1) return;
+    const year = m[2].length===2 ? 2000+parseInt(m[2],10) : parseInt(m[2],10);
+    if(!byYear[year]) byYear[year] = Array(12).fill(null);
+    byYear[year][mi] = value;
+  });
+  return byYear;
 }
 
 let DATA = null;
@@ -919,7 +949,14 @@ function renderCombo(){
         datalabels:{
           display: ctx => LABELS.combo && ctx.dataset.data[ctx.dataIndex]!==null && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter:(v,ctx)=> ctx.dataset.label==='Ontime %' ? v.toFixed(0)+'%' : fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:2
+          font:{ size:fs, weight:'600' },
+          color: ctx => ctx.dataset.label==='Ontime %' ? '#1f2937' : '#fff',
+          backgroundColor: ctx => ctx.dataset.label==='Ontime %' ? undefined : ctx.dataset.backgroundColor,
+          borderRadius: ctx => ctx.dataset.label==='Ontime %' ? 0 : 4,
+          padding: ctx => ctx.dataset.label==='Ontime %' ? 0 : {top:3,bottom:3,left:5,right:5},
+          anchor: ctx => ctx.dataset.label==='Ontime %' ? 'end' : 'center',
+          align: ctx => ctx.dataset.label==='Ontime %' ? 'top' : 'center',
+          offset: ctx => ctx.dataset.label==='Ontime %' ? 2 : 0
         }
       }
     }
@@ -943,31 +980,37 @@ function renderCumulative(){
         datalabels:{
           display: ctx => LABELS.cumulative && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:2
+          font:{ size:fs, weight:'600' }, color: ctx => ctx.dataset.borderColor, anchor:'end', align:'top', offset:2
         }
       }
     }
   });
 }
 
+const PIPELINE_YEAR_COLORS = [PALETTE.amber, PALETTE.teal, PALETTE.slate, PALETTE.blue, PALETTE.violet, PALETTE.rose];
 function renderPipeline(){
-  const series = byIndexRange(pipelineSeries(DATA.pipeline, pipelineFilter.buyers), pipelineFilter);
-  const label = pipelineFilter.buyers.size===1 ? [...pipelineFilter.buyers][0] : pipelineFilter.buyers.size>1 ? pipelineFilter.buyers.size+' buyers' : 'Total Sales';
-  const fs = labelFontSize(series.length);
+  const byYear = pipelineSeriesByYear(DATA.pipeline, pipelineFilter.buyers);
+  const years = Object.keys(byYear).map(Number).sort((a,b)=>a-b);
+  const from = pipelineFilter.from, to = pipelineFilter.to;
+  const labels = MONTH_NAMES.slice(from, to+1);
+  const fs = labelFontSize(labels.length);
   newChart('chartPipeline', {
     type:'line',
-    data:{ labels: series.map(r=>r.label), datasets:[
-      { label, data: series.map(r=>r.value), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, borderWidth:2, tension:.2, pointRadius:2 }
-    ]},
+    data:{ labels, datasets: years.map((y,i)=>({
+      label:String(y), data: byYear[y].slice(from, to+1),
+      borderColor:PIPELINE_YEAR_COLORS[i % PIPELINE_YEAR_COLORS.length],
+      backgroundColor:PIPELINE_YEAR_COLORS[i % PIPELINE_YEAR_COLORS.length],
+      borderWidth:2, tension:.2, pointRadius:2, spanGaps:true
+    })) },
     options:{ responsive:true, maintainAspectRatio:false,
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('pipelineFrom','pipelineTo', pipelineFilter, pipelineFilter.from+els[0].index, renderPipeline); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
-        legend:{display:false},
-        tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.y) } },
+        legend:{display:true, position:'top'},
+        tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
         datalabels:{
-          display: ctx => LABELS.pipeline && ctx.dataset.data[ctx.dataIndex]!==0,
+          display: ctx => LABELS.pipeline && ctx.dataset.data[ctx.dataIndex]!==null && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
           font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:1
         }
@@ -990,7 +1033,7 @@ function renderAging(){
         datalabels:{
           display: ctx => LABELS.aging && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1019,7 +1062,7 @@ function renderAgingByBuyer(){
         datalabels:{
           display: ctx => LABELS.agingByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1045,7 +1088,7 @@ function renderBuyers(){
         datalabels:{
           display: ctx => LABELS.buyers && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1068,7 +1111,7 @@ function renderLateByMonth(){
         datalabels:{
           display: ctx => LABELS.lateByMonth && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
-          font:{ size:fs, weight:'600' }, color:'#fff', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#000', anchor:'center', align:'center'
         }
       }
     }
@@ -1092,7 +1135,7 @@ function renderLateByBuyer(){
         datalabels:{
           display: ctx => LABELS.lateByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+          font:{ size:fs, weight:'600' }, color:'#000', anchor:'center', align:'center'
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
@@ -1116,7 +1159,7 @@ function renderNewProduct(){
         datalabels:{
           display: ctx => LABELS.newProduct && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:2
+          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
         }
       },
       scales:{ y:{ beginAtZero:true, ticks:{ stepSize:5 } } }
@@ -1139,7 +1182,7 @@ function renderRawTables(){
   renderRawTable(rawContainer, 'ontime', '2. Ontime Delivery', ['Month','Late','Ontime','Ontime %'],
     ontimeM.map(r=>({ 'Month':r.label, 'Late':r.late, 'Ontime':r.ontime, 'Ontime %':fmtPct(r.pct) })));
 
-  renderRawTable(rawContainer, 'pipeline', '3. Total Sales by Month (2023–2026)', ['Month','Total Sales ($)'],
+  renderRawTable(rawContainer, 'pipeline', '3. Total Sales by Month', ['Month','Total Sales ($)'],
     pipelineSeries(DATA.pipeline, null).map(r=>({ 'Month':r.label, 'Total Sales ($)':fmtUSD.format(r.value) })));
 
   const ar = arAgingBuckets(DATA.arRows, null);
@@ -1204,7 +1247,7 @@ function wireAllFilters(){
   MS.cumulative = createBuyerMultiSelect('cumulativeBuyerMS', DATA.allBuyerNames, cumulativeFilter, renderCumulative);
 
   MS.pipeline = createBuyerMultiSelect('pipelineBuyerMS', DATA.allBuyerNames, pipelineFilter, renderPipeline);
-  wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>DATA.pipeline.labels, renderPipeline, MS.pipeline);
+  wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>MONTH_NAMES, renderPipeline, MS.pipeline);
 
   MS.arAging = createBuyerMultiSelect('arAgingBuyerMS', DATA.allBuyerNames, arAgingFilter, renderAging);
   MS.arAgingByBuyer = createBuyerMultiSelect('arAgingByBuyerMS', DATA.allBuyerNames, arAgingByBuyerFilter, renderAgingByBuyer);
@@ -1252,7 +1295,7 @@ function loadData(){
     try{
       DATA = prepareData({ soValue, ontime, arAging, pipeline, newProduct });
       syncFilterUI('comboFrom', 'comboTo', comboFilter, MONTH_NAMES);
-      syncFilterUI('pipelineFrom', 'pipelineTo', pipelineFilter, DATA.pipeline.labels);
+      syncFilterUI('pipelineFrom', 'pipelineTo', pipelineFilter, MONTH_NAMES);
       syncFilterUI('lateByMonthFrom', 'lateByMonthTo', lateByMonthFilter, MONTH_NAMES);
       syncFilterUI('newProductFrom', 'newProductTo', newProductFilter, DATA.newProduct.map(r=>r.label));
       if(!filtersWired){ wireAllFilters(); filtersWired = true; }
