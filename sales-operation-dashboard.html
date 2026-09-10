@@ -49,6 +49,10 @@
   .hint{font-size:10.5px;color:var(--muted);width:100%;text-align:right;margin-top:-6px;margin-bottom:8px;}
   section.raw{margin-top:32px;}
   section.raw h2{font-size:16px;margin-bottom:12px;}
+  .raw-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .raw-head h2{margin-bottom:0;}
+  .raw-head button{background:#fff;border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;}
+  .raw-head button:hover{background:#f3f4f6;}
   details{background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;}
   summary{padding:12px 16px;cursor:pointer;font-weight:600;font-size:13px;}
   .table-toolbar{padding:0 16px 10px;}
@@ -106,18 +110,16 @@
       <div class="kpi">
         <div class="kpi-head">
           <div class="label">YoY Growth (same months)</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiYoy"></label>
         </div>
-        <div class="value" id="kpiYoy">xxx</div>
+        <div class="value" id="kpiYoy">–</div>
         <div class="sub">2026 YTD vs 2025 same period</div>
       </div>
       <div class="kpi">
         <div class="kpi-head">
           <div class="label">Overall Ontime Delivery</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiOntime"></label>
         </div>
-        <div class="value" id="kpiOntime">xxx</div>
-        <div class="sub" id="kpiOntimeSub">xxx</div>
+        <div class="value" id="kpiOntime">–</div>
+        <div class="sub" id="kpiOntimeSub"></div>
       </div>
       <div class="kpi">
         <div class="kpi-head">
@@ -138,17 +140,15 @@
       <div class="kpi">
         <div class="kpi-head">
           <div class="label">Total Late Orders</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiLateCount"></label>
         </div>
-        <div class="value" id="kpiLateCount">xxx</div>
+        <div class="value" id="kpiLateCount">–</div>
         <div class="sub">2026 YTD, all buyers</div>
       </div>
       <div class="kpi">
         <div class="kpi-head">
           <div class="label">New Products (YTD)</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiNewProducts"></label>
         </div>
-        <div class="value" id="kpiNewProducts">xxx</div>
+        <div class="value" id="kpiNewProducts">–</div>
         <div class="sub">Unique new items introduced</div>
       </div>
     </div>
@@ -208,10 +208,11 @@
           <h2>AR Aging Value by Buyer</h2>
           <div class="chart-filter">
             <div class="ms" id="arAgingByBuyerMS"></div>
+            <div class="ms" id="arAgingByBuyerDurationMS"></div>
             <label class="lbl-toggle"><input type="checkbox" id="agingByBuyerLabels"> Labels</label>
           </div>
         </div>
-        <div class="hint">top 10 shown by default · select buyers above to see more · click a bar to filter</div>
+        <div class="hint">top 10 shown by default · filter by buyer or duration to see more · click a bar to filter</div>
         <div class="chart-wrap"><canvas id="chartAgingByBuyer"></canvas></div>
       </div>
       <div class="card">
@@ -267,7 +268,10 @@
     </div>
 
     <section class="raw">
-      <h2>Raw Data</h2>
+      <div class="raw-head">
+        <h2>Raw Data</h2>
+        <button type="button" id="collapseAllRaw">Collapse All</button>
+      </div>
       <div id="rawTables"></div>
     </section>
   </div>
@@ -334,18 +338,21 @@ document.addEventListener('keydown', e=>{
   if(e.key==='Escape') document.querySelectorAll('.ms-panel').forEach(p=>{ p.hidden = true; });
 });
 
-function createBuyerMultiSelect(containerId, initialNames, state, renderFn){
+// Generic checkbox-dropdown multi-select. `state[stateKey]` holds the Set
+// of selected option strings (empty = no filter). `itemNoun` names what's
+// being picked ("buyers", "durations") for the button/placeholder text.
+function createMultiSelect(containerId, initialOptions, state, stateKey, renderFn, itemNoun){
   const container = document.getElementById(containerId);
-  let names = initialNames;
+  let options = initialOptions;
   container.classList.add('ms');
 
   const btn = document.createElement('button');
-  btn.type = 'button'; btn.className = 'ms-btn'; btn.textContent = 'All buyers';
+  btn.type = 'button'; btn.className = 'ms-btn'; btn.textContent = 'All '+itemNoun;
 
   const panel = document.createElement('div');
   panel.className = 'ms-panel'; panel.hidden = true;
   const search = document.createElement('input');
-  search.type = 'text'; search.className = 'ms-search'; search.placeholder = 'Search buyers…';
+  search.type = 'text'; search.className = 'ms-search'; search.placeholder = 'Search '+itemNoun+'…';
   const actions = document.createElement('div'); actions.className = 'ms-actions';
   const clearBtn = document.createElement('button'); clearBtn.type='button'; clearBtn.textContent='Clear';
   const allBtn = document.createElement('button'); allBtn.type='button'; allBtn.textContent='Select all';
@@ -353,23 +360,24 @@ function createBuyerMultiSelect(containerId, initialNames, state, renderFn){
   const list = document.createElement('div'); list.className = 'ms-list';
 
   function updateLabel(){
-    if(state.buyers.size===0) btn.textContent = 'All buyers';
-    else if(state.buyers.size===1) btn.textContent = [...state.buyers][0];
-    else btn.textContent = state.buyers.size + ' buyers';
+    const sel = state[stateKey];
+    if(sel.size===0) btn.textContent = 'All '+itemNoun;
+    else if(sel.size===1) btn.textContent = [...sel][0];
+    else btn.textContent = sel.size + ' ' + itemNoun;
   }
   function renderList(){
     list.innerHTML = '';
     const q = search.value.trim().toLowerCase();
-    const filtered = q ? names.filter(n=>n.toLowerCase().includes(q)) : names;
+    const filtered = q ? options.filter(n=>n.toLowerCase().includes(q)) : options;
     if(!filtered.length){
-      const e = document.createElement('div'); e.className='ms-empty'; e.textContent='No matching buyers';
+      const e = document.createElement('div'); e.className='ms-empty'; e.textContent='No matches';
       list.appendChild(e); return;
     }
     filtered.forEach(name=>{
       const item = document.createElement('label'); item.className='ms-item';
-      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = state.buyers.has(name);
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = state[stateKey].has(name);
       cb.addEventListener('change', ()=>{
-        if(cb.checked) state.buyers.add(name); else state.buyers.delete(name);
+        if(cb.checked) state[stateKey].add(name); else state[stateKey].delete(name);
         updateLabel(); renderFn();
       });
       const span = document.createElement('span'); span.textContent = name;
@@ -379,8 +387,8 @@ function createBuyerMultiSelect(containerId, initialNames, state, renderFn){
   }
   search.addEventListener('click', e=>e.stopPropagation());
   search.addEventListener('input', renderList);
-  clearBtn.addEventListener('click', e=>{ e.stopPropagation(); state.buyers.clear(); updateLabel(); renderList(); renderFn(); });
-  allBtn.addEventListener('click', e=>{ e.stopPropagation(); names.forEach(n=>state.buyers.add(n)); updateLabel(); renderList(); renderFn(); });
+  clearBtn.addEventListener('click', e=>{ e.stopPropagation(); state[stateKey].clear(); updateLabel(); renderList(); renderFn(); });
+  allBtn.addEventListener('click', e=>{ e.stopPropagation(); options.forEach(n=>state[stateKey].add(n)); updateLabel(); renderList(); renderFn(); });
   btn.addEventListener('click', e=>{
     e.stopPropagation();
     const willOpen = panel.hidden;
@@ -396,10 +404,13 @@ function createBuyerMultiSelect(containerId, initialNames, state, renderFn){
   updateLabel();
 
   return {
-    setSelection(newNamesArr){ state.buyers = new Set(newNamesArr); updateLabel(); if(!panel.hidden) renderList(); },
-    clear(){ state.buyers.clear(); updateLabel(); if(!panel.hidden) renderList(); },
-    refreshOptions(newNames){ names = newNames; if(!panel.hidden) renderList(); }
+    setSelection(newArr){ state[stateKey] = new Set(newArr); updateLabel(); if(!panel.hidden) renderList(); },
+    clear(){ state[stateKey].clear(); updateLabel(); if(!panel.hidden) renderList(); },
+    refreshOptions(newOptions){ options = newOptions; if(!panel.hidden) renderList(); }
   };
+}
+function createBuyerMultiSelect(containerId, initialNames, state, renderFn){
+  return createMultiSelect(containerId, initialNames, state, 'buyers', renderFn, 'buyers');
 }
 
 const tableUIState = {};
@@ -691,11 +702,15 @@ function arAgingBuckets(rows, buyers){
   const grandTotal = sum(bucketRows.map(r=>r.balance));
   return { bucketRows, grandTotal };
 }
-function arAgingByBuyer(rows, buyers){
+function matchesSet(value, selected){
+  return !selected || selected.size===0 || selected.has(value);
+}
+function arAgingByBuyer(rows, buyers, durations){
   const map = {};
   rows.forEach(r=>{
     if(!r.buyer) return;
     if(!matchesBuyer(r.buyer, buyers)) return;
+    if(!matchesSet(r.duration, durations)) return;
     if(!map[r.buyer]) map[r.buyer] = { name:r.buyer, balance:0 };
     map[r.buyer].balance += r.balance;
   });
@@ -722,7 +737,7 @@ const comboFilter        = { from: 0, to: Infinity, buyers: new Set() };
 const cumulativeFilter   = { buyers: new Set() };
 const pipelineFilter     = { from: 0, to: Infinity, buyers: new Set() };
 const arAgingFilter      = { buyers: new Set() };
-const arAgingByBuyerFilter = { buyers: new Set() };
+const arAgingByBuyerFilter = { buyers: new Set(), durations: new Set() };
 const lateByMonthFilter  = { from: 0, to: Infinity, buyers: new Set() };
 const newProductFilter   = { from: 0, to: Infinity };
 const buyersFilter       = { buyers: new Set() };
@@ -731,16 +746,14 @@ const lateByBuyerFilter  = { buyers: new Set() };
 // Per-chart "show compact data labels on the chart itself" toggles.
 const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, agingByBuyer:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false };
 
-// KPI "show value" masking — each card's checkbox id maps to the element
-// id(s) it controls. Off by default: cards render "xxx" until checked.
+// KPI "show value" masking — only the money-denominated cards get a
+// show/hide checkbox; percentage and count cards just display plainly.
+// Each checkbox id maps to the element id(s) it controls. Off by
+// default: cards render "xxx" until checked.
 const KPI_GROUPS = {
-  showKpiTotal2026:   ['kpiTotal2026','kpiTotal2026Sub'],
-  showKpiYoy:         ['kpiYoy'],
-  showKpiOntime:      ['kpiOntime','kpiOntimeSub'],
-  showKpiAR:          ['kpiAR'],
-  showKpiTopBuyer:    ['kpiTopBuyer','kpiTopBuyerSub'],
-  showKpiLateCount:   ['kpiLateCount'],
-  showKpiNewProducts: ['kpiNewProducts']
+  showKpiTotal2026: ['kpiTotal2026','kpiTotal2026Sub'],
+  showKpiAR:        ['kpiAR'],
+  showKpiTopBuyer:  ['kpiTopBuyer','kpiTopBuyerSub']
 };
 const KPI_TEXT = {};
 const KPI_COLOR = {};
@@ -771,7 +784,10 @@ function prepareData(sheets){
   ontimeRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
   arRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
   pipeline.customerRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
-  return { soRows, ontimeRows, arRows, pipeline, newProduct, allBuyerNames: [...nameSet].sort() };
+  const durationMap = {};
+  arRows.forEach(r=>{ if(r.sort && !durationMap[r.sort]) durationMap[r.sort] = r.duration; });
+  const arDurationOptions = Object.keys(durationMap).sort().map(k=>durationMap[k]);
+  return { soRows, ontimeRows, arRows, pipeline, newProduct, allBuyerNames: [...nameSet].sort(), arDurationOptions };
 }
 
 function byIndexRange(rows, state){
@@ -856,18 +872,22 @@ function renderKPIs(){
 
   const totalNewProducts = sum(newProduct.map(r=>r.count));
 
+  // Money KPIs go through the mask (setKpi + applyKpiVisibility).
   setKpi('kpiTotal2026', fmtUSDCompact.format(total2026));
   setKpi('kpiTotal2026Sub', fmtUSD.format(total2026));
-  setKpi('kpiYoy', yoyPct===null ? '–' : (yoyPct>=0?'+':'')+yoyPct.toFixed(1)+'%', yoyPct===null ? 'inherit' : (yoyPct>=0 ? PALETTE.green : PALETTE.rose));
-  setKpi('kpiOntime', fmtPct(ontimePct), ontimePct===null?'inherit':(ontimePct>=70?PALETTE.green:ontimePct>=40?PALETTE.amber:PALETTE.rose));
-  setKpi('kpiOntimeSub', totalOntime+' ontime / '+totalLate+' late');
   setKpi('kpiAR', fmtUSDCompact.format(arGrandTotal));
   setKpi('kpiTopBuyer', topBuyer ? fmtUSDCompact.format(topBuyer.y2026) : '–');
   setKpi('kpiTopBuyerSub', topBuyer ? topBuyer.name : '');
-  setKpi('kpiLateCount', String(totalLate));
-  setKpi('kpiNewProducts', String(totalNewProducts));
-
   applyKpiVisibility();
+
+  // Non-money KPIs (percentages, counts) always display plainly — no mask.
+  document.getElementById('kpiYoy').textContent = yoyPct===null ? '–' : (yoyPct>=0?'+':'')+yoyPct.toFixed(1)+'%';
+  document.getElementById('kpiYoy').style.color = yoyPct===null ? 'inherit' : (yoyPct>=0 ? PALETTE.green : PALETTE.rose);
+  document.getElementById('kpiOntime').textContent = fmtPct(ontimePct);
+  document.getElementById('kpiOntime').style.color = ontimePct===null?'inherit':(ontimePct>=70?PALETTE.green:ontimePct>=40?PALETTE.amber:PALETTE.rose);
+  document.getElementById('kpiOntimeSub').textContent = totalOntime+' ontime / '+totalLate+' late';
+  document.getElementById('kpiLateCount').textContent = String(totalLate);
+  document.getElementById('kpiNewProducts').textContent = String(totalNewProducts);
 }
 
 function renderCombo(){
@@ -980,9 +1000,12 @@ function renderAging(){
 }
 
 function renderAgingByBuyer(){
-  const filtered = arAgingByBuyer(DATA.arRows, arAgingByBuyerFilter.buyers);
+  const filtered = arAgingByBuyer(DATA.arRows, arAgingByBuyerFilter.buyers, arAgingByBuyerFilter.durations);
   let rows = [...filtered].sort((a,b)=>b.balance-a.balance);
-  rows = topNUnlessFiltered(rows, arAgingByBuyerFilter.buyers);
+  // Top-10 default only when neither the buyer nor duration filter is active.
+  if(arAgingByBuyerFilter.buyers.size===0 && arAgingByBuyerFilter.durations.size===0){
+    rows = rows.slice(0, TOP_N_DEFAULT);
+  }
   newChart('chartAgingByBuyer', {
     type:'bar',
     data:{ labels: rows.map(r=>r.name), datasets:[
@@ -1181,6 +1204,7 @@ function wireAllFilters(){
 
   MS.arAging = createBuyerMultiSelect('arAgingBuyerMS', DATA.allBuyerNames, arAgingFilter, renderAging);
   MS.arAgingByBuyer = createBuyerMultiSelect('arAgingByBuyerMS', DATA.allBuyerNames, arAgingByBuyerFilter, renderAgingByBuyer);
+  MS.arAgingByBuyerDuration = createMultiSelect('arAgingByBuyerDurationMS', DATA.arDurationOptions, arAgingByBuyerFilter, 'durations', renderAgingByBuyer, 'durations');
 
   MS.buyers = createBuyerMultiSelect('buyersMS', DATA.allBuyerNames, buyersFilter, renderBuyers);
 
@@ -1230,7 +1254,12 @@ function loadData(){
       syncFilterUI('lateByMonthFrom', 'lateByMonthTo', lateByMonthFilter, MONTH_NAMES);
       syncFilterUI('newProductFrom', 'newProductTo', newProductFilter, DATA.newProduct.map(r=>r.label));
       if(!filtersWired){ wireAllFilters(); filtersWired = true; }
-      else Object.keys(MS).forEach(k=>MS[k].refreshOptions(DATA.allBuyerNames));
+      else {
+        Object.keys(MS).forEach(k=>{
+          if(k!=='arAgingByBuyerDuration') MS[k].refreshOptions(DATA.allBuyerNames);
+        });
+        MS.arAgingByBuyerDuration.refreshOptions(DATA.arDurationOptions);
+      }
       renderAll();
       statusEl.style.display = 'none';
       dashEl.style.display = 'block';
@@ -1247,6 +1276,10 @@ function loadData(){
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
+document.getElementById('collapseAllRaw').addEventListener('click', ()=>{
+  document.querySelectorAll('#rawTables details').forEach(d=>{ d.open = false; });
+  Object.keys(tableUIState).forEach(id=>{ tableUIState[id].open = false; });
+});
 loadData();
 </script>
 </body>
