@@ -24,12 +24,11 @@
   #status.loading{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
   #status.error{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;}
   #dashboard{display:none;}
+  .kpi-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px;}
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px;}
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
   .kpi-head{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;}
   .kpi .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
-  .kpi-show{display:flex;align-items:center;flex:none;}
-  .kpi-show input{margin:0;cursor:pointer;}
   .kpi .value{font-size:24px;font-weight:700;margin-top:6px;}
   .kpi .sub{font-size:12px;margin-top:4px;color:var(--muted);}
   .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
@@ -98,11 +97,13 @@
   <div id="status" class="loading">Fetching latest data from Google Sheets…</div>
 
   <div id="dashboard">
+    <div class="kpi-toolbar">
+      <label class="lbl-toggle"><input type="checkbox" id="showAllMoneyKpis"> Show monetary values</label>
+    </div>
     <div class="kpi-grid">
       <div class="kpi">
         <div class="kpi-head">
           <div class="label">Total SO Value 2026 (YTD)</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiTotal2026"></label>
         </div>
         <div class="value" id="kpiTotal2026">••••••</div>
         <div class="sub" id="kpiTotal2026Sub">••••••</div>
@@ -124,7 +125,6 @@
       <div class="kpi">
         <div class="kpi-head">
           <div class="label">Total AR Open</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiAR"></label>
         </div>
         <div class="value" id="kpiAR">••••••</div>
         <div class="sub">Grand total balance due</div>
@@ -317,12 +317,14 @@ function topNUnlessFiltered(rows, buyers){
 // currently on the chart — fewer data points (e.g. after filtering)
 // means more room per label, so it can afford to be larger.
 function labelFontSize(count){
-  if(count<=3) return 14;
-  if(count<=6) return 12;
-  if(count<=10) return 10;
-  if(count<=16) return 9;
-  if(count<=28) return 8;
-  return 7;
+  if(count<=2) return 22;
+  if(count<=4) return 18;
+  if(count<=6) return 15;
+  if(count<=10) return 12;
+  if(count<=16) return 10;
+  if(count<=24) return 8;
+  if(count<=36) return 7;
+  return 6;
 }
 
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
@@ -749,14 +751,10 @@ const lateByBuyerFilter  = { buyers: new Set() };
 // Per-chart "show compact data labels on the chart itself" toggles.
 const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, agingByBuyer:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false };
 
-// KPI "show value" masking — only the money-denominated cards get a
-// show/hide checkbox; percentage and count cards just display plainly.
-// Each checkbox id maps to the element id(s) it controls. Off by
-// default: cards render KPI_MASK until checked.
-const KPI_GROUPS = {
-  showKpiTotal2026: ['kpiTotal2026','kpiTotal2026Sub'],
-  showKpiAR:        ['kpiAR']
-};
+// KPI "show value" masking — only the money-denominated cards are
+// maskable, all controlled by one shared checkbox (#showAllMoneyKpis).
+// Off by default: cards render KPI_MASK until checked.
+const KPI_MONEY_ELEMENTS = ['kpiTotal2026','kpiTotal2026Sub','kpiAR'];
 const KPI_MASK = '••••••';
 const KPI_TEXT = {};
 const KPI_COLOR = {};
@@ -765,14 +763,12 @@ function setKpi(id, text, color){
   if(color!==undefined) KPI_COLOR[id] = color;
 }
 function applyKpiVisibility(){
-  Object.keys(KPI_GROUPS).forEach(cbId=>{
-    const show = document.getElementById(cbId).checked;
-    KPI_GROUPS[cbId].forEach(elId=>{
-      const el = document.getElementById(elId);
-      if(!el) return;
-      el.textContent = show ? (KPI_TEXT[elId] !== undefined ? KPI_TEXT[elId] : el.textContent) : KPI_MASK;
-      if(KPI_COLOR.hasOwnProperty(elId)) el.style.color = show ? KPI_COLOR[elId] : 'inherit';
-    });
+  const show = document.getElementById('showAllMoneyKpis').checked;
+  KPI_MONEY_ELEMENTS.forEach(elId=>{
+    const el = document.getElementById(elId);
+    if(!el) return;
+    el.textContent = show ? (KPI_TEXT[elId] !== undefined ? KPI_TEXT[elId] : el.textContent) : KPI_MASK;
+    if(KPI_COLOR.hasOwnProperty(elId)) el.style.color = show ? KPI_COLOR[elId] : 'inherit';
   });
 }
 
@@ -1231,9 +1227,7 @@ function wireAllFilters(){
   wireLabelToggle('lateByBuyerLabels', 'lateByBuyer', renderLateByBuyer);
   wireLabelToggle('newProductLabels', 'newProduct', renderNewProduct);
 
-  Object.keys(KPI_GROUPS).forEach(cbId=>{
-    document.getElementById(cbId).addEventListener('change', applyKpiVisibility);
-  });
+  document.getElementById('showAllMoneyKpis').addEventListener('change', applyKpiVisibility);
 }
 
 let filtersWired = false;
