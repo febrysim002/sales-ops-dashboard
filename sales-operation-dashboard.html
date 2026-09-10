@@ -1297,12 +1297,34 @@ function showFetchError(detail){
     '&bull; Press F12 → Network tab, click Refresh Now, and check the failed request\'s status.';
 }
 
-function fetchSheet(sheetName){
+// Large sheets (Ontime Delivery is ~15k rows) occasionally come back
+// truncated mid-download — the response cuts off inside a quoted field, so
+// PapaParse can't find the rest of the row boundaries and collapses
+// everything from that point into one giant row instead of erroring
+// outright. Every sheet here always has a header plus many data rows, so
+// fewer than 2 parsed rows is a reliable signal of a truncated response —
+// retry before giving up, rather than silently rendering as "no data."
+function fetchSheet(sheetName, attempt=1){
   const url = gvizUrl(sheetName) + '&_ts=' + Date.now();
   return fetch(url, { cache:'no-store' }).then(res=>{
     if(!res.ok) throw new Error('HTTP ' + res.status + ' fetching sheet "' + sheetName + '"');
     return res.text();
-  }).then(text=> Papa.parse(text, { skipEmptyLines:false }).data);
+  }).then(text=>{
+    const data = Papa.parse(text, { skipEmptyLines:false }).data;
+    if(data.length < 2){
+      if(attempt < 6){
+        return new Promise(resolve=>setTimeout(resolve, 600 * attempt))
+          .then(()=>fetchSheet(sheetName, attempt+1));
+      }
+      // Retries exhausted — don't let one bad sheet blank the whole
+      // dashboard. Log it and hand back an empty table; every chart built
+      // from this sheet renders as "no data" instead of every chart on the
+      // page failing to render at all.
+      console.error('Giving up on sheet "' + sheetName + '" after ' + attempt + ' attempts — response kept coming back truncated. Charts using it will show no data until the next refresh.');
+      return [];
+    }
+    return data;
+  });
 }
 
 function wireAllFilters(){
