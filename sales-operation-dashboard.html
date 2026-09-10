@@ -26,7 +26,10 @@
   #dashboard{display:none;}
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px;}
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
+  .kpi-head{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;}
   .kpi .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .kpi-show{display:flex;align-items:center;flex:none;}
+  .kpi-show input{margin:0;cursor:pointer;}
   .kpi .value{font-size:24px;font-weight:700;margin-top:6px;}
   .kpi .sub{font-size:12px;margin-top:4px;color:var(--muted);}
   .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
@@ -92,13 +95,62 @@
 
   <div id="dashboard">
     <div class="kpi-grid">
-      <div class="kpi"><div class="label">Total SO Value 2026 (YTD)</div><div class="value" id="kpiTotal2026">–</div><div class="sub" id="kpiTotal2026Sub"></div></div>
-      <div class="kpi"><div class="label">YoY Growth (same months)</div><div class="value" id="kpiYoy">–</div><div class="sub">2026 YTD vs 2025 same period</div></div>
-      <div class="kpi"><div class="label">Overall Ontime Delivery</div><div class="value" id="kpiOntime">–</div><div class="sub" id="kpiOntimeSub"></div></div>
-      <div class="kpi"><div class="label">Total AR Open</div><div class="value" id="kpiAR">–</div><div class="sub">Grand total balance due</div></div>
-      <div class="kpi"><div class="label">Top Buyer (2026)</div><div class="value" id="kpiTopBuyer">–</div><div class="sub" id="kpiTopBuyerSub"></div></div>
-      <div class="kpi"><div class="label">Total Late Orders</div><div class="value" id="kpiLateCount">–</div><div class="sub">2026 YTD, all buyers</div></div>
-      <div class="kpi"><div class="label">New Products (YTD)</div><div class="value" id="kpiNewProducts">–</div><div class="sub">Unique new items introduced</div></div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">Total SO Value 2026 (YTD)</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiTotal2026"></label>
+        </div>
+        <div class="value" id="kpiTotal2026">xxx</div>
+        <div class="sub" id="kpiTotal2026Sub">xxx</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">YoY Growth (same months)</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiYoy"></label>
+        </div>
+        <div class="value" id="kpiYoy">xxx</div>
+        <div class="sub">2026 YTD vs 2025 same period</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">Overall Ontime Delivery</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiOntime"></label>
+        </div>
+        <div class="value" id="kpiOntime">xxx</div>
+        <div class="sub" id="kpiOntimeSub">xxx</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">Total AR Open</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiAR"></label>
+        </div>
+        <div class="value" id="kpiAR">xxx</div>
+        <div class="sub">Grand total balance due</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">Top Buyer (2026)</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiTopBuyer"></label>
+        </div>
+        <div class="value" id="kpiTopBuyer">xxx</div>
+        <div class="sub" id="kpiTopBuyerSub">xxx</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">Total Late Orders</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiLateCount"></label>
+        </div>
+        <div class="value" id="kpiLateCount">xxx</div>
+        <div class="sub">2026 YTD, all buyers</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-head">
+          <div class="label">New Products (YTD)</div>
+          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiNewProducts"></label>
+        </div>
+        <div class="value" id="kpiNewProducts">xxx</div>
+        <div class="sub">Unique new items introduced</div>
+      </div>
     </div>
 
     <div class="chart-grid">
@@ -143,7 +195,7 @@
       </div>
       <div class="card">
         <div class="card-head">
-          <h2>AR Open Aging</h2>
+          <h2>AR Open, Aging by Duration (Value)</h2>
           <div class="chart-filter">
             <div class="ms" id="arAgingBuyerMS"></div>
             <label class="lbl-toggle"><input type="checkbox" id="agingLabels"> Labels</label>
@@ -153,13 +205,24 @@
       </div>
       <div class="card">
         <div class="card-head">
+          <h2>AR Aging Value by Buyer</h2>
+          <div class="chart-filter">
+            <div class="ms" id="arAgingByBuyerMS"></div>
+            <label class="lbl-toggle"><input type="checkbox" id="agingByBuyerLabels"> Labels</label>
+          </div>
+        </div>
+        <div class="hint">top 10 shown by default · select buyers above to see more · click a bar to filter</div>
+        <div class="chart-wrap"><canvas id="chartAgingByBuyer"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
           <h2>Top Buyers by 2026 Value</h2>
           <div class="chart-filter">
             <div class="ms" id="buyersMS"></div>
             <label class="lbl-toggle"><input type="checkbox" id="buyersLabels"> Labels</label>
           </div>
         </div>
-        <div class="hint">click a bar to filter by that buyer</div>
+        <div class="hint">top 10 shown by default · select buyers above to see more · click a bar to filter</div>
         <div class="chart-wrap"><canvas id="chartBuyers"></canvas></div>
       </div>
       <div class="card">
@@ -226,6 +289,7 @@ const SHEET_NAMES = {
 };
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const LATE_BUCKETS = ['>2Months','1Month','1Week','2Months','2Weeks'];
+const TOP_N_DEFAULT = 10;
 
 function gvizUrl(sheetName){
   return "https://docs.google.com/spreadsheets/d/" + SPREADSHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(sheetName);
@@ -246,6 +310,12 @@ function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
 // selected: a Set of exact buyer names, or empty/absent to mean "no filter".
 function matchesBuyer(name, selected){
   return !selected || selected.size===0 || selected.has(name);
+}
+// Charts that rank buyers (Top Buyers, AR Aging by Buyer) show only the
+// top N by default; once the user filters to specific buyers, all of
+// the selected ones show regardless of count.
+function topNUnlessFiltered(rows, buyers){
+  return (!buyers || buyers.size===0) ? rows.slice(0, TOP_N_DEFAULT) : rows;
 }
 
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
@@ -621,6 +691,16 @@ function arAgingBuckets(rows, buyers){
   const grandTotal = sum(bucketRows.map(r=>r.balance));
   return { bucketRows, grandTotal };
 }
+function arAgingByBuyer(rows, buyers){
+  const map = {};
+  rows.forEach(r=>{
+    if(!r.buyer) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
+    if(!map[r.buyer]) map[r.buyer] = { name:r.buyer, balance:0 };
+    map[r.buyer].balance += r.balance;
+  });
+  return Object.values(map);
+}
 
 function pipelineSeries(pipeline, buyers){
   if(!buyers || buyers.size===0){
@@ -638,17 +718,47 @@ let DATA = null;
 // so a single filter bar would misleadingly imply they all relate to
 // the same slice. Buyer filters only appear on charts whose source
 // sheet actually carries a buyer/customer name; "New Products" has none.
-const comboFilter       = { from: 0, to: Infinity, buyers: new Set() };
-const cumulativeFilter  = { buyers: new Set() };
-const pipelineFilter    = { from: 0, to: Infinity, buyers: new Set() };
-const arAgingFilter     = { buyers: new Set() };
-const lateByMonthFilter = { from: 0, to: Infinity, buyers: new Set() };
-const newProductFilter  = { from: 0, to: Infinity };
-const buyersFilter      = { buyers: new Set() };
-const lateByBuyerFilter = { buyers: new Set() };
+const comboFilter        = { from: 0, to: Infinity, buyers: new Set() };
+const cumulativeFilter   = { buyers: new Set() };
+const pipelineFilter     = { from: 0, to: Infinity, buyers: new Set() };
+const arAgingFilter      = { buyers: new Set() };
+const arAgingByBuyerFilter = { buyers: new Set() };
+const lateByMonthFilter  = { from: 0, to: Infinity, buyers: new Set() };
+const newProductFilter   = { from: 0, to: Infinity };
+const buyersFilter       = { buyers: new Set() };
+const lateByBuyerFilter  = { buyers: new Set() };
 
 // Per-chart "show compact data labels on the chart itself" toggles.
-const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false };
+const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, agingByBuyer:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false };
+
+// KPI "show value" masking — each card's checkbox id maps to the element
+// id(s) it controls. Off by default: cards render "xxx" until checked.
+const KPI_GROUPS = {
+  showKpiTotal2026:   ['kpiTotal2026','kpiTotal2026Sub'],
+  showKpiYoy:         ['kpiYoy'],
+  showKpiOntime:      ['kpiOntime','kpiOntimeSub'],
+  showKpiAR:          ['kpiAR'],
+  showKpiTopBuyer:    ['kpiTopBuyer','kpiTopBuyerSub'],
+  showKpiLateCount:   ['kpiLateCount'],
+  showKpiNewProducts: ['kpiNewProducts']
+};
+const KPI_TEXT = {};
+const KPI_COLOR = {};
+function setKpi(id, text, color){
+  KPI_TEXT[id] = text;
+  if(color!==undefined) KPI_COLOR[id] = color;
+}
+function applyKpiVisibility(){
+  Object.keys(KPI_GROUPS).forEach(cbId=>{
+    const show = document.getElementById(cbId).checked;
+    KPI_GROUPS[cbId].forEach(elId=>{
+      const el = document.getElementById(elId);
+      if(!el) return;
+      el.textContent = show ? (KPI_TEXT[elId] !== undefined ? KPI_TEXT[elId] : el.textContent) : 'xxx';
+      if(KPI_COLOR.hasOwnProperty(elId)) el.style.color = show ? KPI_COLOR[elId] : 'inherit';
+    });
+  });
+}
 
 function prepareData(sheets){
   const soRows = normalizeSoValue(sheets.soValue);
@@ -746,18 +856,18 @@ function renderKPIs(){
 
   const totalNewProducts = sum(newProduct.map(r=>r.count));
 
-  document.getElementById('kpiTotal2026').textContent = fmtUSDCompact.format(total2026);
-  document.getElementById('kpiTotal2026Sub').textContent = fmtUSD.format(total2026);
-  document.getElementById('kpiYoy').textContent = yoyPct===null ? '–' : (yoyPct>=0?'+':'')+yoyPct.toFixed(1)+'%';
-  document.getElementById('kpiYoy').style.color = yoyPct===null ? 'inherit' : (yoyPct>=0 ? PALETTE.green : PALETTE.rose);
-  document.getElementById('kpiOntime').textContent = fmtPct(ontimePct);
-  document.getElementById('kpiOntime').style.color = ontimePct===null?'inherit':(ontimePct>=70?PALETTE.green:ontimePct>=40?PALETTE.amber:PALETTE.rose);
-  document.getElementById('kpiOntimeSub').textContent = totalOntime+' ontime / '+totalLate+' late';
-  document.getElementById('kpiAR').textContent = fmtUSDCompact.format(arGrandTotal);
-  document.getElementById('kpiTopBuyer').textContent = topBuyer ? fmtUSDCompact.format(topBuyer.y2026) : '–';
-  document.getElementById('kpiTopBuyerSub').textContent = topBuyer ? topBuyer.name : '';
-  document.getElementById('kpiLateCount').textContent = totalLate;
-  document.getElementById('kpiNewProducts').textContent = totalNewProducts;
+  setKpi('kpiTotal2026', fmtUSDCompact.format(total2026));
+  setKpi('kpiTotal2026Sub', fmtUSD.format(total2026));
+  setKpi('kpiYoy', yoyPct===null ? '–' : (yoyPct>=0?'+':'')+yoyPct.toFixed(1)+'%', yoyPct===null ? 'inherit' : (yoyPct>=0 ? PALETTE.green : PALETTE.rose));
+  setKpi('kpiOntime', fmtPct(ontimePct), ontimePct===null?'inherit':(ontimePct>=70?PALETTE.green:ontimePct>=40?PALETTE.amber:PALETTE.rose));
+  setKpi('kpiOntimeSub', totalOntime+' ontime / '+totalLate+' late');
+  setKpi('kpiAR', fmtUSDCompact.format(arGrandTotal));
+  setKpi('kpiTopBuyer', topBuyer ? fmtUSDCompact.format(topBuyer.y2026) : '–');
+  setKpi('kpiTopBuyerSub', topBuyer ? topBuyer.name : '');
+  setKpi('kpiLateCount', String(totalLate));
+  setKpi('kpiNewProducts', String(totalNewProducts));
+
+  applyKpiVisibility();
 }
 
 function renderCombo(){
@@ -869,9 +979,35 @@ function renderAging(){
   });
 }
 
+function renderAgingByBuyer(){
+  const filtered = arAgingByBuyer(DATA.arRows, arAgingByBuyerFilter.buyers);
+  let rows = [...filtered].sort((a,b)=>b.balance-a.balance);
+  rows = topNUnlessFiltered(rows, arAgingByBuyerFilter.buyers);
+  newChart('chartAgingByBuyer', {
+    type:'bar',
+    data:{ labels: rows.map(r=>r.name), datasets:[
+      { label:'Balance Due', data: rows.map(r=>r.balance), backgroundColor:PALETTE.amber }
+    ]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      onClick:(evt, els)=>{ if(els.length){ MS.arAgingByBuyer.setSelection([rows[els[0].index].name]); setTimeout(renderAgingByBuyer,0); } },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      plugins:{
+        legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } },
+        datalabels:{
+          display: ctx => LABELS.agingByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>fmtUSDCompact.format(v),
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+        }
+      },
+      scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
+    }
+  });
+}
+
 function renderBuyers(){
   const filtered = buyerTotalsFromSoRows(DATA.soRows).filter(r=>matchesBuyer(r.name, buyersFilter.buyers));
-  const rows = [...filtered].sort((a,b)=>b.y2026-a.y2026);
+  let rows = [...filtered].sort((a,b)=>b.y2026-a.y2026);
+  rows = topNUnlessFiltered(rows, buyersFilter.buyers);
   newChart('chartBuyers', {
     type:'bar',
     data:{ labels: rows.map(r=>r.name), datasets:[
@@ -980,7 +1116,7 @@ function renderRawTables(){
     pipelineSeries(DATA.pipeline, null).map(r=>({ 'Month':r.label, 'Total Sales ($)':fmtUSD.format(r.value) })));
 
   const ar = arAgingBuckets(DATA.arRows, null);
-  renderRawTable(rawContainer, 'arAging', '4. AR Open Aging', ['Key','Balance Due'],
+  renderRawTable(rawContainer, 'arAging', '4. AR Open, Aging by Duration', ['Key','Balance Due'],
     [...ar.bucketRows.map(r=>({ 'Key':r.sort+'. '+r.duration, 'Balance Due':fmtUSD.format(r.balance) })),
      { 'Key':'Grand Total', 'Balance Due':fmtUSD.format(ar.grandTotal) }]);
 
@@ -995,6 +1131,9 @@ function renderRawTables(){
 
   renderRawTable(rawContainer, 'newProduct', '8. Monthly New Product', ['Month','COUNTUNIQUE of Item No.'],
     DATA.newProduct.map(r=>({ 'Month':r.label, 'COUNTUNIQUE of Item No.':r.count })));
+
+  renderRawTable(rawContainer, 'arAgingByBuyer', '9. AR Aging Value by Buyer', ['Buyer Name','Balance Due'],
+    [...arAgingByBuyer(DATA.arRows, null)].sort((a,b)=>b.balance-a.balance).map(r=>({ 'Buyer Name':r.name, 'Balance Due':fmtUSD.format(r.balance) })));
 }
 
 function renderAll(){
@@ -1003,6 +1142,7 @@ function renderAll(){
   renderCumulative();
   renderPipeline();
   renderAging();
+  renderAgingByBuyer();
   renderBuyers();
   renderLateByMonth();
   renderLateByBuyer();
@@ -1040,6 +1180,7 @@ function wireAllFilters(){
   wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>DATA.pipeline.labels, renderPipeline, MS.pipeline);
 
   MS.arAging = createBuyerMultiSelect('arAgingBuyerMS', DATA.allBuyerNames, arAgingFilter, renderAging);
+  MS.arAgingByBuyer = createBuyerMultiSelect('arAgingByBuyerMS', DATA.allBuyerNames, arAgingByBuyerFilter, renderAgingByBuyer);
 
   MS.buyers = createBuyerMultiSelect('buyersMS', DATA.allBuyerNames, buyersFilter, renderBuyers);
 
@@ -1054,10 +1195,15 @@ function wireAllFilters(){
   wireLabelToggle('cumulativeLabels', 'cumulative', renderCumulative);
   wireLabelToggle('pipelineLabels', 'pipeline', renderPipeline);
   wireLabelToggle('agingLabels', 'aging', renderAging);
+  wireLabelToggle('agingByBuyerLabels', 'agingByBuyer', renderAgingByBuyer);
   wireLabelToggle('buyersLabels', 'buyers', renderBuyers);
   wireLabelToggle('lateByMonthLabels', 'lateByMonth', renderLateByMonth);
   wireLabelToggle('lateByBuyerLabels', 'lateByBuyer', renderLateByBuyer);
   wireLabelToggle('newProductLabels', 'newProduct', renderNewProduct);
+
+  Object.keys(KPI_GROUPS).forEach(cbId=>{
+    document.getElementById(cbId).addEventListener('change', applyKpiVisibility);
+  });
 }
 
 let filtersWired = false;
