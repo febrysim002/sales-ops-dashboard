@@ -6,6 +6,7 @@
 <title>Sales Ops Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <style>
   :root{
     --bg:#f4f6f9; --card:#ffffff; --border:#e3e8ef; --text:#1f2937; --muted:#6b7280;
@@ -36,11 +37,12 @@
   .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
   .card-head h2{margin:0;font-size:15px;font-weight:600;}
   .chart-filter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  .chart-filter select, .chart-filter input{padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text);}
-  .chart-filter input{width:150px;}
+  .chart-filter select{padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text);}
   .chart-filter .sep{color:var(--muted);font-size:12px;}
   .chart-filter button{background:#fff;border:1px solid var(--border);color:var(--muted);padding:5px 9px;border-radius:6px;font-size:11px;cursor:pointer;}
   .chart-filter button:hover{background:#f3f4f6;color:var(--text);}
+  .lbl-toggle{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;}
+  .lbl-toggle input{margin:0;cursor:pointer;}
   .hint{font-size:10.5px;color:var(--muted);width:100%;text-align:right;margin-top:-6px;margin-bottom:8px;}
   section.raw{margin-top:32px;}
   section.raw h2{font-size:16px;margin-bottom:12px;}
@@ -56,6 +58,23 @@
   th.sort-asc::after{content:'\2191';color:var(--blue);}
   th.sort-desc::after{content:'\2193';color:var(--blue);}
   footer{text-align:center;color:var(--muted);font-size:12px;padding:24px;}
+
+  /* Buyer multi-select (checkbox dropdown) */
+  .ms{position:relative;}
+  .ms-btn{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:#fff;color:var(--text);cursor:pointer;min-width:110px;max-width:170px;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ms-btn::after{content:'\25BE';font-size:10px;color:var(--muted);flex:none;}
+  .ms-panel{position:absolute;top:calc(100% + 4px);left:0;z-index:30;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);width:240px;max-height:300px;display:flex;flex-direction:column;}
+  .ms-panel[hidden]{display:none;}
+  .ms-search{margin:8px 8px 4px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;}
+  .ms-actions{display:flex;justify-content:space-between;padding:2px 10px 6px;}
+  .ms-actions button{background:none;border:none;color:var(--blue);cursor:pointer;font-size:11px;padding:2px 4px;}
+  .ms-actions button:hover{text-decoration:underline;}
+  .ms-list{overflow-y:auto;padding:0 6px 8px;border-top:1px solid var(--border);}
+  .ms-item{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:4px;font-size:12px;cursor:pointer;}
+  .ms-item:hover{background:#f3f4f6;}
+  .ms-item input{margin:0;flex:none;}
+  .ms-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ms-empty{padding:12px;font-size:12px;color:var(--muted);text-align:center;}
 </style>
 </head>
 <body>
@@ -90,8 +109,9 @@
             <select id="comboFrom"></select>
             <span class="sep">–</span>
             <select id="comboTo"></select>
-            <input type="text" id="comboBuyer" placeholder="Filter buyer…">
+            <div class="ms" id="comboBuyerMS"></div>
             <button type="button" id="comboReset">All</button>
+            <label class="lbl-toggle"><input type="checkbox" id="comboLabels"> Labels</label>
           </div>
         </div>
         <div class="hint">click a bar to jump to that month</div>
@@ -101,7 +121,8 @@
         <div class="card-head">
           <h2>Cumulative SO Value — 2025 vs 2026</h2>
           <div class="chart-filter">
-            <input type="text" id="cumulativeBuyer" placeholder="Filter buyer…">
+            <div class="ms" id="cumulativeBuyerMS"></div>
+            <label class="lbl-toggle"><input type="checkbox" id="cumulativeLabels"> Labels</label>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="chartCumulative"></canvas></div>
@@ -113,8 +134,9 @@
             <select id="pipelineFrom"></select>
             <span class="sep">–</span>
             <select id="pipelineTo"></select>
-            <input type="text" id="pipelineBuyer" placeholder="Filter buyer…">
+            <div class="ms" id="pipelineBuyerMS"></div>
             <button type="button" id="pipelineReset">All</button>
+            <label class="lbl-toggle"><input type="checkbox" id="pipelineLabels"> Labels</label>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="chartPipeline"></canvas></div>
@@ -123,7 +145,8 @@
         <div class="card-head">
           <h2>AR Open Aging</h2>
           <div class="chart-filter">
-            <input type="text" id="arAgingBuyer" placeholder="Filter buyer…">
+            <div class="ms" id="arAgingBuyerMS"></div>
+            <label class="lbl-toggle"><input type="checkbox" id="agingLabels"> Labels</label>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="chartAging"></canvas></div>
@@ -132,7 +155,8 @@
         <div class="card-head">
           <h2>Top Buyers by 2026 Value</h2>
           <div class="chart-filter">
-            <input type="text" id="buyersSearch" placeholder="Filter buyer…">
+            <div class="ms" id="buyersMS"></div>
+            <label class="lbl-toggle"><input type="checkbox" id="buyersLabels"> Labels</label>
           </div>
         </div>
         <div class="hint">click a bar to filter by that buyer</div>
@@ -145,8 +169,9 @@
             <select id="lateByMonthFrom"></select>
             <span class="sep">–</span>
             <select id="lateByMonthTo"></select>
-            <input type="text" id="lateByMonthBuyer" placeholder="Filter buyer…">
+            <div class="ms" id="lateByMonthBuyerMS"></div>
             <button type="button" id="lateByMonthReset">All</button>
+            <label class="lbl-toggle"><input type="checkbox" id="lateByMonthLabels"> Labels</label>
           </div>
         </div>
         <div class="hint">click a bar to jump to that month</div>
@@ -156,7 +181,8 @@
         <div class="card-head">
           <h2>Late Delivery Duration by Buyer (2026 YTD)</h2>
           <div class="chart-filter">
-            <input type="text" id="lateByBuyerSearch" placeholder="Filter buyer…">
+            <div class="ms" id="lateByBuyerMS"></div>
+            <label class="lbl-toggle"><input type="checkbox" id="lateByBuyerLabels"> Labels</label>
           </div>
         </div>
         <div class="hint">click a bar to filter by that buyer</div>
@@ -170,6 +196,7 @@
             <span class="sep">–</span>
             <select id="newProductTo"></select>
             <button type="button" id="newProductReset">All</button>
+            <label class="lbl-toggle"><input type="checkbox" id="newProductLabels"> Labels</label>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="chartNewProduct"></canvas></div>
@@ -186,6 +213,9 @@
 <footer>Data source: live Google Sheet, fetched per-sheet and aggregated client-side · Re-fetched on every page load</footer>
 
 <script>
+Chart.register(ChartDataLabels);
+Chart.defaults.set('plugins.datalabels', { display:false });
+
 const SPREADSHEET_ID = "1m-2znh_9e_UHtuwTheWPpytuEZcKY88OaGngVAlBoFw";
 const SHEET_NAMES = {
   soValue: "Monthly SO Value (2025 vs 2026)",
@@ -213,12 +243,94 @@ function toNum(v){
   return isNaN(n) ? 0 : n;
 }
 function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
-function matchesBuyer(name, query){
-  return !query || String(name||'').toLowerCase().includes(query.toLowerCase());
+// selected: a Set of exact buyer names, or empty/absent to mean "no filter".
+function matchesBuyer(name, selected){
+  return !selected || selected.size===0 || selected.has(name);
 }
 
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
 const BUCKET_COLORS = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.violet, PALETTE.teal]; // matches LATE_BUCKETS order
+
+// ---------------------------------------------------------------------
+// Buyer multi-select (checkbox dropdown). One instance per chart that
+// has buyer data; state.buyers is a Set of exact selected names, empty
+// = no filter. Options list is shared/global across all instances but
+// each instance keeps its own selection.
+// ---------------------------------------------------------------------
+document.addEventListener('click', ()=>{
+  document.querySelectorAll('.ms-panel').forEach(p=>{ p.hidden = true; });
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') document.querySelectorAll('.ms-panel').forEach(p=>{ p.hidden = true; });
+});
+
+function createBuyerMultiSelect(containerId, initialNames, state, renderFn){
+  const container = document.getElementById(containerId);
+  let names = initialNames;
+  container.classList.add('ms');
+
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'ms-btn'; btn.textContent = 'All buyers';
+
+  const panel = document.createElement('div');
+  panel.className = 'ms-panel'; panel.hidden = true;
+  const search = document.createElement('input');
+  search.type = 'text'; search.className = 'ms-search'; search.placeholder = 'Search buyers…';
+  const actions = document.createElement('div'); actions.className = 'ms-actions';
+  const clearBtn = document.createElement('button'); clearBtn.type='button'; clearBtn.textContent='Clear';
+  const allBtn = document.createElement('button'); allBtn.type='button'; allBtn.textContent='Select all';
+  actions.appendChild(clearBtn); actions.appendChild(allBtn);
+  const list = document.createElement('div'); list.className = 'ms-list';
+
+  function updateLabel(){
+    if(state.buyers.size===0) btn.textContent = 'All buyers';
+    else if(state.buyers.size===1) btn.textContent = [...state.buyers][0];
+    else btn.textContent = state.buyers.size + ' buyers';
+  }
+  function renderList(){
+    list.innerHTML = '';
+    const q = search.value.trim().toLowerCase();
+    const filtered = q ? names.filter(n=>n.toLowerCase().includes(q)) : names;
+    if(!filtered.length){
+      const e = document.createElement('div'); e.className='ms-empty'; e.textContent='No matching buyers';
+      list.appendChild(e); return;
+    }
+    filtered.forEach(name=>{
+      const item = document.createElement('label'); item.className='ms-item';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = state.buyers.has(name);
+      cb.addEventListener('change', ()=>{
+        if(cb.checked) state.buyers.add(name); else state.buyers.delete(name);
+        updateLabel(); renderFn();
+      });
+      const span = document.createElement('span'); span.textContent = name;
+      item.appendChild(cb); item.appendChild(span);
+      list.appendChild(item);
+    });
+  }
+  search.addEventListener('click', e=>e.stopPropagation());
+  search.addEventListener('input', renderList);
+  clearBtn.addEventListener('click', e=>{ e.stopPropagation(); state.buyers.clear(); updateLabel(); renderList(); renderFn(); });
+  allBtn.addEventListener('click', e=>{ e.stopPropagation(); names.forEach(n=>state.buyers.add(n)); updateLabel(); renderList(); renderFn(); });
+  btn.addEventListener('click', e=>{
+    e.stopPropagation();
+    const willOpen = panel.hidden;
+    document.querySelectorAll('.ms-panel').forEach(p=>{ p.hidden = true; });
+    panel.hidden = !willOpen;
+    if(willOpen){ search.value=''; renderList(); search.focus(); }
+  });
+  panel.addEventListener('click', e=>e.stopPropagation());
+
+  panel.appendChild(search); panel.appendChild(actions); panel.appendChild(list);
+  container.innerHTML = '';
+  container.appendChild(btn); container.appendChild(panel);
+  updateLabel();
+
+  return {
+    setSelection(newNamesArr){ state.buyers = new Set(newNamesArr); updateLabel(); if(!panel.hidden) renderList(); },
+    clear(){ state.buyers.clear(); updateLabel(); if(!panel.hidden) renderList(); },
+    refreshOptions(newNames){ names = newNames; if(!panel.hidden) renderList(); }
+  };
+}
 
 const tableUIState = {};
 
@@ -393,6 +505,7 @@ function normalizePipeline(rows){
 
 function normalizeNewProduct(rows){
   // Columns: Year, Month, Document Number, Posting Date, Item No., Item/Service Description, Production Date
+  // (No buyer/customer column in this sheet, so this chart has no buyer filter.)
   const monthly = {}; // month -> Set(item no.)
   for(let i=1;i<rows.length;i++){
     const r = rows[i];
@@ -411,12 +524,12 @@ function normalizeNewProduct(rows){
   return rowsOut;
 }
 
-// ---- On-demand aggregations (month range + optional buyer substring) ----
+// ---- On-demand aggregations (month range + optional buyer set) ----
 
-function monthlySoValue(rows, buyerQuery){
+function monthlySoValue(rows, buyers){
   const monthly = {};
   rows.forEach(r=>{
-    if(!matchesBuyer(r.buyer, buyerQuery)) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
     if(!monthly[r.month]) monthly[r.month] = { y2025:0, y2026:0 };
     monthly[r.month]['y'+r.year] += r.amount;
   });
@@ -444,13 +557,13 @@ function buyerTotalsFromSoRows(rows){
   return Object.values(buyers);
 }
 
-function ontimeMonthly(rows, buyerQuery){
+function ontimeMonthly(rows, buyers){
   // COUNTUNIQUE(SO_No) per month/status — one SO_No can span several
   // delivery-order rows (partial shipments), so counting rows directly
   // would multiply-count any order shipped in more than one DO.
   const lateSets = {}, ontimeSets = {};
   rows.forEach(r=>{
-    if(!matchesBuyer(r.buyer, buyerQuery)) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
     if(r.status==='Late') (lateSets[r.month] || (lateSets[r.month]=new Set())).add(r.soNo);
     else if(r.status==='Ontime') (ontimeSets[r.month] || (ontimeSets[r.month]=new Set())).add(r.soNo);
   });
@@ -463,11 +576,11 @@ function ontimeMonthly(rows, buyerQuery){
   }
   return out;
 }
-function lateByMonth(rows, buyerQuery){
+function lateByMonth(rows, buyers){
   const sets = {}; // "month|bucket" -> Set(SO_No)
   rows.forEach(r=>{
     if(r.status!=='Late' || !LATE_BUCKETS.includes(r.bucket)) return;
-    if(!matchesBuyer(r.buyer, buyerQuery)) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
     const k = r.month+'|'+r.bucket;
     (sets[k] || (sets[k]=new Set())).add(r.soNo);
   });
@@ -497,10 +610,10 @@ function lateByBuyer(rows){
   });
 }
 
-function arAgingBuckets(rows, buyerQuery){
+function arAgingBuckets(rows, buyers){
   const buckets = {};
   rows.forEach(r=>{
-    if(!matchesBuyer(r.buyer, buyerQuery)) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
     if(!buckets[r.sort]) buckets[r.sort] = { sort:r.sort, duration:r.duration, balance:0 };
     buckets[r.sort].balance += r.balance;
   });
@@ -509,11 +622,11 @@ function arAgingBuckets(rows, buyerQuery){
   return { bucketRows, grandTotal };
 }
 
-function pipelineSeries(pipeline, buyerQuery){
-  if(!buyerQuery){
+function pipelineSeries(pipeline, buyers){
+  if(!buyers || buyers.size===0){
     return pipeline.labels.map((label,i)=>({ label, value: pipeline.totalValues[i] }));
   }
-  const matched = pipeline.customerRows.filter(r=>matchesBuyer(r.buyer, buyerQuery));
+  const matched = pipeline.customerRows.filter(r=>matchesBuyer(r.buyer, buyers));
   return pipeline.labels.map((label,i)=>({ label, value: sum(matched.map(r=>r.values[i]||0)) }));
 }
 
@@ -525,23 +638,30 @@ let DATA = null;
 // so a single filter bar would misleadingly imply they all relate to
 // the same slice. Buyer filters only appear on charts whose source
 // sheet actually carries a buyer/customer name; "New Products" has none.
-const comboFilter       = { from: 0, to: Infinity, buyer: '' };
-const cumulativeFilter  = { buyer: '' };
-const pipelineFilter    = { from: 0, to: Infinity, buyer: '' };
-const arAgingFilter     = { buyer: '' };
-const lateByMonthFilter = { from: 0, to: Infinity, buyer: '' };
+const comboFilter       = { from: 0, to: Infinity, buyers: new Set() };
+const cumulativeFilter  = { buyers: new Set() };
+const pipelineFilter    = { from: 0, to: Infinity, buyers: new Set() };
+const arAgingFilter     = { buyers: new Set() };
+const lateByMonthFilter = { from: 0, to: Infinity, buyers: new Set() };
 const newProductFilter  = { from: 0, to: Infinity };
-const buyersFilter      = { query: '' };
-const lateByBuyerFilter = { query: '' };
+const buyersFilter      = { buyers: new Set() };
+const lateByBuyerFilter = { buyers: new Set() };
+
+// Per-chart "show compact data labels on the chart itself" toggles.
+const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false };
 
 function prepareData(sheets){
-  return {
-    soRows: normalizeSoValue(sheets.soValue),
-    ontimeRows: normalizeOntime(sheets.ontime),
-    arRows: normalizeArAging(sheets.arAging),
-    pipeline: normalizePipeline(sheets.pipeline),
-    newProduct: normalizeNewProduct(sheets.newProduct)
-  };
+  const soRows = normalizeSoValue(sheets.soValue);
+  const ontimeRows = normalizeOntime(sheets.ontime);
+  const arRows = normalizeArAging(sheets.arAging);
+  const pipeline = normalizePipeline(sheets.pipeline);
+  const newProduct = normalizeNewProduct(sheets.newProduct);
+  const nameSet = new Set();
+  soRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
+  ontimeRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
+  arRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
+  pipeline.customerRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
+  return { soRows, ontimeRows, arRows, pipeline, newProduct, allBuyerNames: [...nameSet].sort() };
 }
 
 function byIndexRange(rows, state){
@@ -566,7 +686,7 @@ function syncFilterUI(fromId, toId, state, labels){
   populateSelect(fromId, labels, state.from);
   populateSelect(toId, labels, state.to);
 }
-function wireIndexFilter(fromId, toId, resetId, state, labelsFn, renderFn){
+function wireIndexFilter(fromId, toId, resetId, state, labelsFn, renderFn, msWidget){
   document.getElementById(fromId).addEventListener('change', e=>{
     const v = parseInt(e.target.value,10);
     state.from = v; if(state.to < v){ state.to = v; document.getElementById(toId).value = v; }
@@ -582,11 +702,7 @@ function wireIndexFilter(fromId, toId, resetId, state, labelsFn, renderFn){
     state.from = 0; state.to = len-1;
     document.getElementById(fromId).value = 0;
     document.getElementById(toId).value = len-1;
-    if(document.getElementById(resetId).dataset.clearsBuyer){
-      state.buyer = '';
-      const buyerInput = document.getElementById(resetId.replace('Reset','Buyer'));
-      if(buyerInput) buyerInput.value = '';
-    }
+    if(msWidget) msWidget.clear();
     renderFn();
   });
 }
@@ -599,28 +715,19 @@ function jumpToIndex(fromId, toId, state, idx, renderFn){
   // doing that synchronously crashes Chart.js's in-flight event handling.
   setTimeout(renderFn, 0);
 }
-function wireBuyerTextFilter(inputId, state, renderFn){
-  document.getElementById(inputId).addEventListener('input', e=>{
-    state.buyer = e.target.value;
+function wireLabelToggle(checkboxId, key, renderFn){
+  document.getElementById(checkboxId).addEventListener('change', e=>{
+    LABELS[key] = e.target.checked;
     renderFn();
   });
-}
-function wireBuyerFilter(inputId, state, renderFn){
-  document.getElementById(inputId).addEventListener('input', e=>{
-    state.query = e.target.value;
-    renderFn();
-  });
-}
-function jumpToBuyer(inputId, state, name, renderFn){
-  state.query = name;
-  document.getElementById(inputId).value = name;
-  setTimeout(renderFn, 0);
 }
 
+const MS = {};
+
 function renderKPIs(){
-  const soMonthly = monthlySoValue(DATA.soRows, '');
-  const ontimeM = ontimeMonthly(DATA.ontimeRows, '');
-  const { grandTotal: arGrandTotal } = arAgingBuckets(DATA.arRows, '');
+  const soMonthly = monthlySoValue(DATA.soRows, null);
+  const ontimeM = ontimeMonthly(DATA.ontimeRows, null);
+  const { grandTotal: arGrandTotal } = arAgingBuckets(DATA.arRows, null);
   const buyers = buyerTotalsFromSoRows(DATA.soRows);
   const newProduct = DATA.newProduct;
 
@@ -654,8 +761,8 @@ function renderKPIs(){
 }
 
 function renderCombo(){
-  const monthly = byIndexRange(monthlySoValue(DATA.soRows, comboFilter.buyer), comboFilter);
-  const ontimeM = byIndexRange(ontimeMonthly(DATA.ontimeRows, comboFilter.buyer), comboFilter);
+  const monthly = byIndexRange(monthlySoValue(DATA.soRows, comboFilter.buyers), comboFilter);
+  const ontimeM = byIndexRange(ontimeMonthly(DATA.ontimeRows, comboFilter.buyers), comboFilter);
   const labels = monthly.map(r=>r.label);
   const so2025 = monthly.map(r=>r.y2025);
   const so2026 = monthly.map(r=>r.y2026).map(v=>v>0?v:null);
@@ -678,16 +785,23 @@ function renderCombo(){
         y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } },
         y1:{ position:'right', beginAtZero:true, max:100, grid:{drawOnChartArea:false}, ticks:{ callback:v=>v+'%' } }
       },
-      plugins:{ tooltip:{ callbacks:{ label:(ctx)=>{
-        if(ctx.dataset.label==='Ontime %') return ctx.dataset.label+': '+(ctx.parsed.y===null?'–':ctx.parsed.y.toFixed(1)+'%');
-        return ctx.dataset.label+': '+(ctx.parsed.y===null?'–':fmtUSD.format(ctx.parsed.y));
-      }}}}
+      plugins:{
+        tooltip:{ callbacks:{ label:(ctx)=>{
+          if(ctx.dataset.label==='Ontime %') return ctx.dataset.label+': '+(ctx.parsed.y===null?'–':ctx.parsed.y.toFixed(1)+'%');
+          return ctx.dataset.label+': '+(ctx.parsed.y===null?'–':fmtUSD.format(ctx.parsed.y));
+        }}},
+        datalabels:{
+          display: ctx => LABELS.combo && ctx.dataset.data[ctx.dataIndex]!==null && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter:(v,ctx)=> ctx.dataset.label==='Ontime %' ? v.toFixed(0)+'%' : fmtUSDCompact.format(v),
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:2
+        }
+      }
     }
   });
 }
 
 function renderCumulative(){
-  const monthly = monthlySoValue(DATA.soRows, cumulativeFilter.buyer);
+  const monthly = monthlySoValue(DATA.soRows, cumulativeFilter.buyers);
   const rows = cumulativeFromMonthly(monthly);
   newChart('chartCumulative', {
     type:'line',
@@ -697,43 +811,66 @@ function renderCumulative(){
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
-      plugins:{ tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } } }
+      plugins:{
+        tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
+        datalabels:{
+          display: ctx => LABELS.cumulative && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>fmtUSDCompact.format(v),
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:2
+        }
+      }
     }
   });
 }
 
 function renderPipeline(){
-  const series = byIndexRange(pipelineSeries(DATA.pipeline, pipelineFilter.buyer), pipelineFilter);
+  const series = byIndexRange(pipelineSeries(DATA.pipeline, pipelineFilter.buyers), pipelineFilter);
+  const label = pipelineFilter.buyers.size===1 ? [...pipelineFilter.buyers][0] : pipelineFilter.buyers.size>1 ? pipelineFilter.buyers.size+' buyers' : 'Total Sales';
   newChart('chartPipeline', {
     type:'line',
     data:{ labels: series.map(r=>r.label), datasets:[
-      { label: pipelineFilter.buyer ? pipelineFilter.buyer : 'Total Sales', data: series.map(r=>r.value), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, borderWidth:2, tension:.2, pointRadius:2 }
+      { label, data: series.map(r=>r.value), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, borderWidth:2, tension:.2, pointRadius:2 }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('pipelineFrom','pipelineTo', pipelineFilter, pipelineFilter.from+els[0].index, renderPipeline); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.y) } } }
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.y) } },
+        datalabels:{
+          display: ctx => LABELS.pipeline && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>fmtUSDCompact.format(v),
+          font:{ size:8, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:1
+        }
+      }
     }
   });
 }
 
 function renderAging(){
-  const { bucketRows } = arAgingBuckets(DATA.arRows, arAgingFilter.buyer);
+  const { bucketRows } = arAgingBuckets(DATA.arRows, arAgingFilter.buyers);
   newChart('chartAging', {
     type:'bar',
     data:{ labels: bucketRows.map(r=>r.duration), datasets:[
       { label:'Balance Due', data: bucketRows.map(r=>r.balance), backgroundColor: bucketRows.map((_,i)=>`hsl(${10+i*16},70%,50%)`) }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } } },
+      plugins:{
+        legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } },
+        datalabels:{
+          display: ctx => LABELS.aging && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>fmtUSDCompact.format(v),
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+        }
+      },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
     }
   });
 }
 
 function renderBuyers(){
-  const filtered = buyerTotalsFromSoRows(DATA.soRows).filter(r=>matchesBuyer(r.name, buyersFilter.query));
+  const filtered = buyerTotalsFromSoRows(DATA.soRows).filter(r=>matchesBuyer(r.name, buyersFilter.buyers));
   const rows = [...filtered].sort((a,b)=>b.y2026-a.y2026);
   newChart('chartBuyers', {
     type:'bar',
@@ -741,16 +878,23 @@ function renderBuyers(){
       { label:'2026 ($)', data: rows.map(r=>r.y2026), backgroundColor:PALETTE.blue }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToBuyer('buyersSearch', buyersFilter, rows[els[0].index].name, renderBuyers); },
+      onClick:(evt, els)=>{ if(els.length){ MS.buyers.setSelection([rows[els[0].index].name]); setTimeout(renderBuyers,0); } },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } } },
+      plugins:{
+        legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } },
+        datalabels:{
+          display: ctx => LABELS.buyers && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>fmtUSDCompact.format(v),
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+        }
+      },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
     }
   });
 }
 
 function renderLateByMonth(){
-  const rows = byIndexRange(lateByMonth(DATA.ontimeRows, lateByMonthFilter.buyer), lateByMonthFilter);
+  const rows = byIndexRange(lateByMonth(DATA.ontimeRows, lateByMonthFilter.buyers), lateByMonthFilter);
   const labels = rows.map(r=>r.label);
   newChart('chartLateByMonth', {
     type:'bar',
@@ -758,13 +902,20 @@ function renderLateByMonth(){
     options:{ responsive:true, maintainAspectRatio:false,
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('lateByMonthFrom','lateByMonthTo', lateByMonthFilter, lateByMonthFilter.from+els[0].index, renderLateByMonth); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-      scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } }
+      scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } },
+      plugins:{
+        datalabels:{
+          display: ctx => LABELS.lateByMonth && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>v,
+          font:{ size:8.5, weight:'600' }, color:'#fff', anchor:'center', align:'center'
+        }
+      }
     }
   });
 }
 
 function renderLateByBuyer(){
-  const filtered = lateByBuyer(DATA.ontimeRows).filter(r=>matchesBuyer(r.name, lateByBuyerFilter.query));
+  const filtered = lateByBuyer(DATA.ontimeRows).filter(r=>matchesBuyer(r.name, lateByBuyerFilter.buyers));
   const rows = [...filtered].sort((a,b)=>b.total-a.total);
   newChart('chartLateByBuyer', {
     type:'bar',
@@ -772,9 +923,16 @@ function renderLateByBuyer(){
       { label:'Late Orders', data: rows.map(r=>r.total), backgroundColor:PALETTE.rose }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToBuyer('lateByBuyerSearch', lateByBuyerFilter, rows[els[0].index].name, renderLateByBuyer); },
+      onClick:(evt, els)=>{ if(els.length){ MS.lateByBuyer.setSelection([rows[els[0].index].name]); setTimeout(renderLateByBuyer,0); } },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-      plugins:{ legend:{display:false} },
+      plugins:{
+        legend:{display:false},
+        datalabels:{
+          display: ctx => LABELS.lateByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>v,
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'end', offset:4
+        }
+      },
       scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
     }
   });
@@ -790,7 +948,14 @@ function renderNewProduct(){
     options:{ responsive:true, maintainAspectRatio:false,
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('newProductFrom','newProductTo', newProductFilter, newProductFilter.from+els[0].index, renderNewProduct); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-      plugins:{ legend:{display:false} },
+      plugins:{
+        legend:{display:false},
+        datalabels:{
+          display: ctx => LABELS.newProduct && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>v,
+          font:{ size:9, weight:'600' }, color:'#1f2937', anchor:'end', align:'top', offset:2
+        }
+      },
       scales:{ y:{ beginAtZero:true, ticks:{ stepSize:5 } } }
     }
   });
@@ -800,21 +965,21 @@ function renderRawTables(){
   const rawContainer = document.getElementById('rawTables');
   rawContainer.innerHTML = '';
 
-  const soMonthly = monthlySoValue(DATA.soRows, '');
+  const soMonthly = monthlySoValue(DATA.soRows, null);
   renderRawTable(rawContainer, 'soMonthly', '1. Monthly SO Value', ['Month','2025 ($)','2026 ($)'],
     soMonthly.map(r=>({ 'Month':r.label, '2025 ($)':fmtUSD.format(r.y2025), '2026 ($)':fmtUSD.format(r.y2026) })));
 
   renderRawTable(rawContainer, 'soCumulative', '1b. Cumulative SO Value', ['Month','2025 ($)','2026 ($)'],
     cumulativeFromMonthly(soMonthly).map(r=>({ 'Month':r.label, '2025 ($)':fmtUSD.format(r.y2025), '2026 ($)':fmtUSD.format(r.y2026) })));
 
-  const ontimeM = ontimeMonthly(DATA.ontimeRows, '');
+  const ontimeM = ontimeMonthly(DATA.ontimeRows, null);
   renderRawTable(rawContainer, 'ontime', '2. Ontime Delivery', ['Month','Late','Ontime','Ontime %'],
     ontimeM.map(r=>({ 'Month':r.label, 'Late':r.late, 'Ontime':r.ontime, 'Ontime %':fmtPct(r.pct) })));
 
   renderRawTable(rawContainer, 'pipeline', '3. Total Sales by Month (2023–2026)', ['Month','Total Sales ($)'],
-    pipelineSeries(DATA.pipeline, '').map(r=>({ 'Month':r.label, 'Total Sales ($)':fmtUSD.format(r.value) })));
+    pipelineSeries(DATA.pipeline, null).map(r=>({ 'Month':r.label, 'Total Sales ($)':fmtUSD.format(r.value) })));
 
-  const ar = arAgingBuckets(DATA.arRows, '');
+  const ar = arAgingBuckets(DATA.arRows, null);
   renderRawTable(rawContainer, 'arAging', '4. AR Open Aging', ['Key','Balance Due'],
     [...ar.bucketRows.map(r=>({ 'Key':r.sort+'. '+r.duration, 'Balance Due':fmtUSD.format(r.balance) })),
      { 'Key':'Grand Total', 'Balance Due':fmtUSD.format(ar.grandTotal) }]);
@@ -823,7 +988,7 @@ function renderRawTables(){
     buyerTotalsFromSoRows(DATA.soRows).map(r=>({ 'Buyer Name':r.name, '2025 ($)':fmtUSD.format(r.y2025), '2026 ($)':fmtUSD.format(r.y2026) })));
 
   renderRawTable(rawContainer, 'lateByMonth', '6. Late Delivery Duration by Month', ['Month',...LATE_BUCKETS],
-    lateByMonth(DATA.ontimeRows, '').map(r=>{ const o={'Month':r.label}; LATE_BUCKETS.forEach(b=>o[b]=r[b]); return o; }));
+    lateByMonth(DATA.ontimeRows, null).map(r=>{ const o={'Month':r.label}; LATE_BUCKETS.forEach(b=>o[b]=r[b]); return o; }));
 
   renderRawTable(rawContainer, 'lateByBuyer', '7. Late Delivery Duration by Buyer (2026 YTD)', ['Buyer Name',...LATE_BUCKETS,'Grand Total'],
     lateByBuyer(DATA.ontimeRows).map(r=>{ const o={'Buyer Name':r.name}; LATE_BUCKETS.forEach(b=>o[b]=r[b]); o['Grand Total']=r.total; return o; }));
@@ -866,26 +1031,33 @@ function fetchSheet(sheetName){
 }
 
 function wireAllFilters(){
-  wireIndexFilter('comboFrom', 'comboTo', 'comboReset', comboFilter, ()=>MONTH_NAMES, renderCombo);
-  document.getElementById('comboReset').dataset.clearsBuyer = '1';
-  wireBuyerTextFilter('comboBuyer', comboFilter, renderCombo);
+  MS.combo = createBuyerMultiSelect('comboBuyerMS', DATA.allBuyerNames, comboFilter, renderCombo);
+  wireIndexFilter('comboFrom', 'comboTo', 'comboReset', comboFilter, ()=>MONTH_NAMES, renderCombo, MS.combo);
 
-  wireBuyerTextFilter('cumulativeBuyer', cumulativeFilter, renderCumulative);
+  MS.cumulative = createBuyerMultiSelect('cumulativeBuyerMS', DATA.allBuyerNames, cumulativeFilter, renderCumulative);
 
-  wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>DATA.pipeline.labels, renderPipeline);
-  document.getElementById('pipelineReset').dataset.clearsBuyer = '1';
-  wireBuyerTextFilter('pipelineBuyer', pipelineFilter, renderPipeline);
+  MS.pipeline = createBuyerMultiSelect('pipelineBuyerMS', DATA.allBuyerNames, pipelineFilter, renderPipeline);
+  wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>DATA.pipeline.labels, renderPipeline, MS.pipeline);
 
-  wireBuyerTextFilter('arAgingBuyer', arAgingFilter, renderAging);
+  MS.arAging = createBuyerMultiSelect('arAgingBuyerMS', DATA.allBuyerNames, arAgingFilter, renderAging);
 
-  wireIndexFilter('lateByMonthFrom', 'lateByMonthTo', 'lateByMonthReset', lateByMonthFilter, ()=>MONTH_NAMES, renderLateByMonth);
-  document.getElementById('lateByMonthReset').dataset.clearsBuyer = '1';
-  wireBuyerTextFilter('lateByMonthBuyer', lateByMonthFilter, renderLateByMonth);
+  MS.buyers = createBuyerMultiSelect('buyersMS', DATA.allBuyerNames, buyersFilter, renderBuyers);
 
-  wireIndexFilter('newProductFrom', 'newProductTo', 'newProductReset', newProductFilter, ()=>DATA.newProduct, renderNewProduct);
+  MS.lateByMonth = createBuyerMultiSelect('lateByMonthBuyerMS', DATA.allBuyerNames, lateByMonthFilter, renderLateByMonth);
+  wireIndexFilter('lateByMonthFrom', 'lateByMonthTo', 'lateByMonthReset', lateByMonthFilter, ()=>MONTH_NAMES, renderLateByMonth, MS.lateByMonth);
 
-  wireBuyerFilter('buyersSearch', buyersFilter, renderBuyers);
-  wireBuyerFilter('lateByBuyerSearch', lateByBuyerFilter, renderLateByBuyer);
+  MS.lateByBuyer = createBuyerMultiSelect('lateByBuyerMS', DATA.allBuyerNames, lateByBuyerFilter, renderLateByBuyer);
+
+  wireIndexFilter('newProductFrom', 'newProductTo', 'newProductReset', newProductFilter, ()=>DATA.newProduct, renderNewProduct, null);
+
+  wireLabelToggle('comboLabels', 'combo', renderCombo);
+  wireLabelToggle('cumulativeLabels', 'cumulative', renderCumulative);
+  wireLabelToggle('pipelineLabels', 'pipeline', renderPipeline);
+  wireLabelToggle('agingLabels', 'aging', renderAging);
+  wireLabelToggle('buyersLabels', 'buyers', renderBuyers);
+  wireLabelToggle('lateByMonthLabels', 'lateByMonth', renderLateByMonth);
+  wireLabelToggle('lateByBuyerLabels', 'lateByBuyer', renderLateByBuyer);
+  wireLabelToggle('newProductLabels', 'newProduct', renderNewProduct);
 }
 
 let filtersWired = false;
@@ -912,6 +1084,7 @@ function loadData(){
       syncFilterUI('lateByMonthFrom', 'lateByMonthTo', lateByMonthFilter, MONTH_NAMES);
       syncFilterUI('newProductFrom', 'newProductTo', newProductFilter, DATA.newProduct.map(r=>r.label));
       if(!filtersWired){ wireAllFilters(); filtersWired = true; }
+      else Object.keys(MS).forEach(k=>MS[k].refreshOptions(DATA.allBuyerNames));
       renderAll();
       statusEl.style.display = 'none';
       dashEl.style.display = 'block';
