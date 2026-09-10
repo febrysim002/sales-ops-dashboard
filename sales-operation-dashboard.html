@@ -178,9 +178,7 @@
         <div class="card-head">
           <h2>Total Sales by Month</h2>
           <div class="chart-filter">
-            <select id="pipelineFrom"></select>
-            <span class="sep">–</span>
-            <select id="pipelineTo"></select>
+            <div class="ms" id="pipelineYearMS"></div>
             <div class="ms" id="pipelineBuyerMS"></div>
             <button type="button" id="pipelineReset">All</button>
             <label class="lbl-toggle"><input type="checkbox" id="pipelineLabels"> Labels</label>
@@ -289,6 +287,10 @@ const SHEET_NAMES = {
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const LATE_BUCKETS = ['>2Months','1Month','1Week','2Months','2Weeks'];
 const TOP_N_DEFAULT = 10;
+// Matches header cells like "Jan-23" or "Sep 24" (the sheet is inconsistent
+// about the separator) so month columns can be found by pattern rather than
+// a fixed position.
+const PIPELINE_MONTH_RE = /^([A-Za-z]{3})[\s-]\s*(\d{2,4})$/;
 
 function gvizUrl(sheetName){
   return "https://docs.google.com/spreadsheets/d/" + SPREADSHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(sheetName);
@@ -579,23 +581,26 @@ function normalizeArAging(rows){
 }
 
 function normalizePipeline(rows){
-  // Row 0: ["", " Total ", "$amt", ..., "$amt", ""]  (sheet-computed monthly totals)
-  // Row 1: ["Customer_Code","Customer_Name","Jan-23",...,"Dec-26",""]  (header, gives month labels)
-  // Row 2+: one row per customer, same month columns
+  // Row 0: sheet-computed monthly totals ("Total" label a couple columns in)
+  // Row 1: header — some identifying columns including "Customer_Name", then
+  //        one "Jan-23".."Dec-26" column per month. Both the name column and
+  //        the month columns are located by name/pattern rather than a fixed
+  //        index — this sheet has already had a column inserted in front of
+  //        these once before.
   const totalRow = rows[0] || [];
   const headerRow = rows[1] || [];
+  const cName = headerRow.map(h=>String(h||'').trim().toLowerCase()).indexOf('customer_name');
   const labels = [];
   const cols = [];
-  for(let c=2;c<headerRow.length;c++){
-    const label = (headerRow[c]||'').trim();
-    if(!label) continue;
-    labels.push(label); cols.push(c);
-  }
+  headerRow.forEach((h,c)=>{
+    const label = (h||'').trim();
+    if(label && PIPELINE_MONTH_RE.test(label)){ labels.push(label); cols.push(c); }
+  });
   const totalValues = cols.map(c=>toNum(totalRow[c]));
   const customerRows = [];
   for(let i=2;i<rows.length;i++){
     const r = rows[i];
-    const buyer = r && (r[1]||'').trim();
+    const buyer = r && cName>=0 && (r[cName]||'').trim();
     if(!buyer) continue;
     customerRows.push({ buyer, values: cols.map(c=>toNum(r[c])) });
   }
@@ -746,7 +751,6 @@ function pipelineSeries(pipeline, buyers){
 // Regroups the flat "Jan-23".."Dec-26" column series into one 12-month
 // (Jan..Dec) array per calendar year, so the chart can plot each year as
 // its own line on a Jan-Dec axis instead of one long multi-year timeline.
-const PIPELINE_MONTH_RE = /^([A-Za-z]{3})[\s-]\s*(\d{2,4})$/;
 function pipelineSeriesByYear(pipeline, buyers){
   const flat = pipelineSeries(pipeline, buyers);
   const byYear = {};
@@ -772,7 +776,7 @@ let DATA = null;
 // sheet actually carries a buyer/customer name; "New Products" has none.
 const comboFilter        = { from: 0, to: Infinity, buyers: new Set() };
 const cumulativeFilter   = { buyers: new Set() };
-const pipelineFilter     = { from: 0, to: Infinity, buyers: new Set() };
+const pipelineFilter     = { buyers: new Set(), years: new Set() };
 const arAgingFilter      = { buyers: new Set() };
 const arAgingByBuyerFilter = { buyers: new Set(), durations: new Set() };
 const lateByMonthFilter  = { from: 0, to: Infinity, buyers: new Set() };
@@ -818,7 +822,8 @@ function prepareData(sheets){
   const durationMap = {};
   arRows.forEach(r=>{ if(r.sort && !durationMap[r.sort]) durationMap[r.sort] = r.duration; });
   const arDurationOptions = Object.keys(durationMap).sort().map(k=>durationMap[k]);
-  return { soRows, ontimeRows, arRows, pipeline, newProduct, allBuyerNames: [...nameSet].sort(), arDurationOptions };
+  const pipelineYears = Object.keys(pipelineSeriesByYear(pipeline, null)).sort((a,b)=>Number(a)-Number(b));
+  return { soRows, ontimeRows, arRows, pipeline, newProduct, allBuyerNames: [...nameSet].sort(), arDurationOptions, pipelineYears };
 }
 
 function byIndexRange(rows, state){
@@ -990,21 +995,19 @@ function renderCumulative(){
 const PIPELINE_YEAR_COLORS = [PALETTE.amber, PALETTE.teal, PALETTE.slate, PALETTE.blue, PALETTE.violet, PALETTE.rose];
 function renderPipeline(){
   const byYear = pipelineSeriesByYear(DATA.pipeline, pipelineFilter.buyers);
-  const years = Object.keys(byYear).map(Number).sort((a,b)=>a-b);
-  const from = pipelineFilter.from, to = pipelineFilter.to;
-  const labels = MONTH_NAMES.slice(from, to+1);
-  const fs = labelFontSize(labels.length);
+  const allYears = DATA.pipelineYears; // full, unfiltered — keeps each year's color stable regardless of the year filter
+  const years = allYears.filter(y=>matchesSet(y, pipelineFilter.years));
+  const fs = labelFontSize(MONTH_NAMES.length);
   newChart('chartPipeline', {
     type:'line',
-    data:{ labels, datasets: years.map((y,i)=>({
-      label:String(y), data: byYear[y].slice(from, to+1),
-      borderColor:PIPELINE_YEAR_COLORS[i % PIPELINE_YEAR_COLORS.length],
-      backgroundColor:PIPELINE_YEAR_COLORS[i % PIPELINE_YEAR_COLORS.length],
+    data:{ labels: MONTH_NAMES, datasets: years.map(y=>({
+      label:y, data: byYear[y] || Array(12).fill(null),
+      borderColor:PIPELINE_YEAR_COLORS[allYears.indexOf(y) % PIPELINE_YEAR_COLORS.length],
+      backgroundColor:PIPELINE_YEAR_COLORS[allYears.indexOf(y) % PIPELINE_YEAR_COLORS.length],
       borderWidth:2, tension:.2, pointRadius:2, spanGaps:true
     })) },
     options:{ responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToIndex('pipelineFrom','pipelineTo', pipelineFilter, pipelineFilter.from+els[0].index, renderPipeline); },
-      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      interaction:{ mode:'index', intersect:false },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
         legend:{display:true, position:'top'},
@@ -1247,7 +1250,12 @@ function wireAllFilters(){
   MS.cumulative = createBuyerMultiSelect('cumulativeBuyerMS', DATA.allBuyerNames, cumulativeFilter, renderCumulative);
 
   MS.pipeline = createBuyerMultiSelect('pipelineBuyerMS', DATA.allBuyerNames, pipelineFilter, renderPipeline);
-  wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>MONTH_NAMES, renderPipeline, MS.pipeline);
+  MS.pipelineYear = createMultiSelect('pipelineYearMS', DATA.pipelineYears, pipelineFilter, 'years', renderPipeline, 'years');
+  document.getElementById('pipelineReset').addEventListener('click', ()=>{
+    MS.pipeline.clear();
+    MS.pipelineYear.clear();
+    renderPipeline();
+  });
 
   MS.arAging = createBuyerMultiSelect('arAgingBuyerMS', DATA.allBuyerNames, arAgingFilter, renderAging);
   MS.arAgingByBuyer = createBuyerMultiSelect('arAgingByBuyerMS', DATA.allBuyerNames, arAgingByBuyerFilter, renderAgingByBuyer);
@@ -1295,15 +1303,15 @@ function loadData(){
     try{
       DATA = prepareData({ soValue, ontime, arAging, pipeline, newProduct });
       syncFilterUI('comboFrom', 'comboTo', comboFilter, MONTH_NAMES);
-      syncFilterUI('pipelineFrom', 'pipelineTo', pipelineFilter, MONTH_NAMES);
       syncFilterUI('lateByMonthFrom', 'lateByMonthTo', lateByMonthFilter, MONTH_NAMES);
       syncFilterUI('newProductFrom', 'newProductTo', newProductFilter, DATA.newProduct.map(r=>r.label));
       if(!filtersWired){ wireAllFilters(); filtersWired = true; }
       else {
         Object.keys(MS).forEach(k=>{
-          if(k!=='arAgingByBuyerDuration') MS[k].refreshOptions(DATA.allBuyerNames);
+          if(k!=='arAgingByBuyerDuration' && k!=='pipelineYear') MS[k].refreshOptions(DATA.allBuyerNames);
         });
         MS.arAgingByBuyerDuration.refreshOptions(DATA.arDurationOptions);
+        MS.pipelineYear.refreshOptions(DATA.pipelineYears);
       }
       renderAll();
       statusEl.style.display = 'none';
