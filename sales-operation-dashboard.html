@@ -131,14 +131,6 @@
       </div>
       <div class="kpi">
         <div class="kpi-head">
-          <div class="label">Top Buyer (2026)</div>
-          <label class="kpi-show" title="Show value"><input type="checkbox" id="showKpiTopBuyer"></label>
-        </div>
-        <div class="value" id="kpiTopBuyer">••••••</div>
-        <div class="sub" id="kpiTopBuyerSub">••••••</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-head">
           <div class="label">Total Late Orders</div>
         </div>
         <div class="value" id="kpiLateCount">–</div>
@@ -760,11 +752,10 @@ const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, agi
 // KPI "show value" masking — only the money-denominated cards get a
 // show/hide checkbox; percentage and count cards just display plainly.
 // Each checkbox id maps to the element id(s) it controls. Off by
-// default: cards render "xxx" until checked.
+// default: cards render KPI_MASK until checked.
 const KPI_GROUPS = {
   showKpiTotal2026: ['kpiTotal2026','kpiTotal2026Sub'],
-  showKpiAR:        ['kpiAR'],
-  showKpiTopBuyer:  ['kpiTopBuyer','kpiTopBuyerSub']
+  showKpiAR:        ['kpiAR']
 };
 const KPI_MASK = '••••••';
 const KPI_TEXT = {};
@@ -866,7 +857,6 @@ function renderKPIs(){
   const soMonthly = monthlySoValue(DATA.soRows, null);
   const ontimeM = ontimeMonthly(DATA.ontimeRows, null);
   const { grandTotal: arGrandTotal } = arAgingBuckets(DATA.arRows, null);
-  const buyers = buyerTotalsFromSoRows(DATA.soRows);
   const newProduct = DATA.newProduct;
 
   const total2026 = sum(soMonthly.map(r=>r.y2026));
@@ -879,17 +869,12 @@ function renderKPIs(){
   const totalLate = sum(ontimeM.map(r=>r.late));
   const ontimePct = (totalOntime+totalLate)>0 ? totalOntime/(totalOntime+totalLate)*100 : null;
 
-  let topBuyer = null;
-  buyers.forEach(r=>{ if(!topBuyer || r.y2026>topBuyer.y2026) topBuyer = r; });
-
   const totalNewProducts = sum(newProduct.map(r=>r.count));
 
   // Money KPIs go through the mask (setKpi + applyKpiVisibility).
   setKpi('kpiTotal2026', fmtUSDCompact.format(total2026));
   setKpi('kpiTotal2026Sub', fmtUSD.format(total2026));
   setKpi('kpiAR', fmtUSDCompact.format(arGrandTotal));
-  setKpi('kpiTopBuyer', topBuyer ? fmtUSDCompact.format(topBuyer.y2026) : '–');
-  setKpi('kpiTopBuyerSub', topBuyer ? topBuyer.name : '');
   applyKpiVisibility();
 
   // Non-money KPIs (percentages, counts) always display plainly — no mask.
