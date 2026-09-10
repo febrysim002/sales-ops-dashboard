@@ -334,6 +334,25 @@ function labelFontSize(count){
   return 12;
 }
 
+// Bar labels default to centered inside the bar, but a short/thin bar can't
+// fit one without it touching the axis next to it — these decide, per bar,
+// whether it still fits centered or needs to move just outside the bar's
+// tip (away from the axis) instead.
+function vBarLabelFits(ctx, fontSize){
+  const el = ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex];
+  if(!el) return true;
+  return Math.abs(el.y - el.base) >= fontSize * 1.8;
+}
+function hBarLabelFits(ctx, fontSize, text){
+  const el = ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex];
+  if(!el) return true;
+  const c2d = ctx.chart.ctx;
+  c2d.save(); c2d.font = "600 "+fontSize+"px 'Segoe UI', sans-serif";
+  const textWidth = c2d.measureText(String(text)).width;
+  c2d.restore();
+  return Math.abs(el.x - el.base) >= textWidth + 10;
+}
+
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
 const BUCKET_COLORS = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.violet, PALETTE.teal]; // matches LATE_BUCKETS order
 
@@ -962,9 +981,9 @@ function renderCombo(){
           backgroundColor: ctx => ctx.dataset.label==='Ontime %' ? undefined : ctx.dataset.backgroundColor,
           borderRadius: ctx => ctx.dataset.label==='Ontime %' ? 0 : 4,
           padding: ctx => ctx.dataset.label==='Ontime %' ? 0 : {top:3,bottom:3,left:5,right:5},
-          anchor: ctx => ctx.dataset.label==='Ontime %' ? 'end' : 'center',
-          align: ctx => ctx.dataset.label==='Ontime %' ? 'top' : 'center',
-          offset: ctx => ctx.dataset.label==='Ontime %' ? 2 : 0
+          anchor: ctx => ctx.dataset.label==='Ontime %' ? 'end' : (vBarLabelFits(ctx, fs) ? 'center' : 'end'),
+          align: ctx => ctx.dataset.label==='Ontime %' ? 'top' : (vBarLabelFits(ctx, fs) ? 'center' : 'top'),
+          offset: ctx => ctx.dataset.label==='Ontime %' ? 2 : (vBarLabelFits(ctx, fs) ? 0 : 4)
         }
       }
     }
@@ -1040,7 +1059,10 @@ function renderAging(){
         datalabels:{
           display: ctx => LABELS.aging && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#1f2937',
+          anchor: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          align: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          offset: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1069,7 +1091,10 @@ function renderAgingByBuyer(){
         datalabels:{
           display: ctx => LABELS.agingByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#1f2937',
+          anchor: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          align: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          offset: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1095,7 +1120,10 @@ function renderBuyers(){
         datalabels:{
           display: ctx => LABELS.buyers && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#1f2937',
+          anchor: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          align: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          offset: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1120,7 +1148,10 @@ function renderLateByMonth(){
         datalabels:{
           display: ctx => LABELS.lateByMonth && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
-          font:{ size:fs, weight:'600' }, color:'#000', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#000',
+          anchor: ctx => vBarLabelFits(ctx, fs) ? 'center' : 'end',
+          align: ctx => vBarLabelFits(ctx, fs) ? 'center' : 'top',
+          offset: ctx => vBarLabelFits(ctx, fs) ? 0 : 2
         }
       }
     }
@@ -1144,7 +1175,10 @@ function renderLateByBuyer(){
         datalabels:{
           display: ctx => LABELS.lateByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
-          font:{ size:fs, weight:'600' }, color:'#000', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#000',
+          anchor: ctx => hBarLabelFits(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          align: ctx => hBarLabelFits(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
+          offset: ctx => hBarLabelFits(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
@@ -1168,7 +1202,10 @@ function renderNewProduct(){
         datalabels:{
           display: ctx => LABELS.newProduct && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
-          font:{ size:fs, weight:'600' }, color:'#1f2937', anchor:'center', align:'center'
+          font:{ size:fs, weight:'600' }, color:'#1f2937',
+          anchor: ctx => vBarLabelFits(ctx, fs) ? 'center' : 'end',
+          align: ctx => vBarLabelFits(ctx, fs) ? 'center' : 'top',
+          offset: ctx => vBarLabelFits(ctx, fs) ? 0 : 4
         }
       },
       scales:{ y:{ beginAtZero:true, ticks:{ stepSize:5 } } }
