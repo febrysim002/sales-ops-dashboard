@@ -32,10 +32,11 @@
   .kpi .value{font-size:24px;font-weight:700;margin-top:6px;}
   .kpi .sub{font-size:12px;margin-top:4px;color:var(--muted);}
   .chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
-  @media (max-width:900px){.chart-grid{grid-template-columns:1fr;}}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
-  .card .chart-wrap{position:relative;height:280px;}
+  @media (max-width:900px){.chart-grid{grid-template-columns:1fr;} .card .chart-wrap{height:360px;}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;overflow:hidden;}
+  .card .chart-wrap{position:relative;height:320px;max-width:100%;}
   .card.wide{grid-column:1 / -1;}
+  .card .chart-wrap.tall{height:440px;}
   .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
   .card-head h2{margin:0;font-size:15px;font-weight:600;}
   .chart-filter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
@@ -175,7 +176,7 @@
         </div>
         <div class="chart-wrap"><canvas id="chartCumulative"></canvas></div>
       </div>
-      <div class="card">
+      <div class="card wide">
         <div class="card-head">
           <h2>Total Sales by Month</h2>
           <div class="chart-filter">
@@ -185,7 +186,7 @@
             <label class="lbl-toggle"><input type="checkbox" id="pipelineLabels"> Labels</label>
           </div>
         </div>
-        <div class="chart-wrap"><canvas id="chartPipeline"></canvas></div>
+        <div class="chart-wrap tall"><canvas id="chartPipeline"></canvas></div>
       </div>
       <div class="card">
         <div class="card-head">
@@ -971,10 +972,11 @@ function renderCombo(){
     options: {
       responsive:true, maintainAspectRatio:false,
       interaction:{ mode:'index', intersect:false },
+      layout:{ padding:{ top:24 } },
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('comboFrom','comboTo', comboFilter, comboFilter.from+els[0].index, renderCombo); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{
-        y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } },
+        y:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } },
         y1:{ position:'right', beginAtZero:true, max:100, grid:{drawOnChartArea:false}, ticks:{ callback:v=>v+'%' } }
       },
       plugins:{
@@ -1011,7 +1013,8 @@ function renderCumulative(){
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       interaction:{ mode:'index', intersect:false },
-      scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
+      layout:{ padding:{ top:24 } },
+      scales:{ y:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
         tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
         datalabels:{
@@ -1040,7 +1043,8 @@ function renderPipeline(){
     })) },
     options:{ responsive:true, maintainAspectRatio:false,
       interaction:{ mode:'index', intersect:false },
-      scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
+      layout:{ padding:{ top:24 } },
+      scales:{ y:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
         legend:{display:true, position:'top'},
         tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
@@ -1063,6 +1067,7 @@ function renderAging(){
       { label:'Balance Due', data: bucketRows.map(r=>r.balance), backgroundColor: bucketRows.map((_,i)=>`hsl(${10+i*16},70%,50%)`) }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right:36 } },
       plugins:{
         legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } },
         datalabels:{
@@ -1074,7 +1079,7 @@ function renderAging(){
           offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
-      scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
+      scales:{ x:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
     }
   });
 }
@@ -1093,6 +1098,7 @@ function renderAgingByBuyer(){
       { label:'Balance Due', data: rows.map(r=>r.balance), backgroundColor:PALETTE.amber }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right:36 } },
       onClick:(evt, els)=>{ if(els.length){ MS.arAgingByBuyer.setSelection([rows[els[0].index].name]); setTimeout(renderAgingByBuyer,0); } },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{
@@ -1106,7 +1112,7 @@ function renderAgingByBuyer(){
           offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
-      scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
+      scales:{ x:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
     }
   });
 }
@@ -1122,6 +1128,7 @@ function renderBuyers(){
       { label:'2026 ($)', data: rows.map(r=>r.y2026), backgroundColor:PALETTE.blue }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right:36 } },
       onClick:(evt, els)=>{ if(els.length){ MS.buyers.setSelection([rows[els[0].index].name]); setTimeout(renderBuyers,0); } },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{
@@ -1135,7 +1142,7 @@ function renderBuyers(){
           offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
-      scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
+      scales:{ x:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
     }
   });
 }
@@ -1149,9 +1156,10 @@ function renderLateByMonth(){
     data:{ labels, datasets: LATE_BUCKETS.map((c,i)=>({ label:c, data: rows.map(r=>r[c]), backgroundColor: BUCKET_COLORS[i] })) },
     options:{ responsive:true, maintainAspectRatio:false,
       interaction:{ mode:'index', intersect:false },
+      layout:{ padding:{ top:20 } },
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('lateByMonthFrom','lateByMonthTo', lateByMonthFilter, lateByMonthFilter.from+els[0].index, renderLateByMonth); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-      scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } },
+      scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true, grace:'6%' } },
       plugins:{
         tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>ctx.dataset.label+': '+ctx.parsed.y } },
         datalabels:{
@@ -1177,6 +1185,7 @@ function renderLateByBuyer(){
       { label:'Late Orders', data: rows.map(r=>r.total), backgroundColor:PALETTE.rose }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right:36 } },
       onClick:(evt, els)=>{ if(els.length){ MS.lateByBuyer.setSelection([rows[els[0].index].name]); setTimeout(renderLateByBuyer,0); } },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{
@@ -1190,7 +1199,7 @@ function renderLateByBuyer(){
           offset: ctx => hBarLabelPlacement(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
-      scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
+      scales:{ x:{ beginAtZero:true, grace:'8%', ticks:{ stepSize:1 } } }
     }
   });
 }
@@ -1204,6 +1213,7 @@ function renderNewProduct(){
       { label:'New Items', data: rows.map(r=>r.count), backgroundColor:PALETTE.green }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:20 } },
       onClick:(evt, els)=>{ if(els.length) jumpToIndex('newProductFrom','newProductTo', newProductFilter, newProductFilter.from+els[0].index, renderNewProduct); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{
@@ -1217,7 +1227,7 @@ function renderNewProduct(){
           offset: ctx => vBarLabelFits(ctx, fs) ? 0 : 4
         }
       },
-      scales:{ y:{ beginAtZero:true, ticks:{ stepSize:5 } } }
+      scales:{ y:{ beginAtZero:true, grace:'8%', ticks:{ stepSize:5 } } }
     }
   });
 }
