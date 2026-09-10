@@ -78,7 +78,7 @@
       <div class="kpi"><div class="label">Overall Ontime Delivery</div><div class="value" id="kpiOntime">–</div><div class="sub" id="kpiOntimeSub"></div></div>
       <div class="kpi"><div class="label">Total AR Open</div><div class="value" id="kpiAR">–</div><div class="sub">Grand total balance due</div></div>
       <div class="kpi"><div class="label">Top Buyer (2026)</div><div class="value" id="kpiTopBuyer">–</div><div class="sub" id="kpiTopBuyerSub"></div></div>
-      <div class="kpi"><div class="label">Total Late Orders</div><div class="value" id="kpiLateCount">–</div><div class="sub">By duration, all buyers</div></div>
+      <div class="kpi"><div class="label">Total Late Orders</div><div class="value" id="kpiLateCount">–</div><div class="sub">2026 YTD, all buyers</div></div>
       <div class="kpi"><div class="label">New Products (YTD)</div><div class="value" id="kpiNewProducts">–</div><div class="sub">Unique new items introduced</div></div>
     </div>
 
@@ -104,7 +104,7 @@
       </div>
       <div class="card">
         <div class="card-head">
-          <h2>Actual Sales vs Forecast Pipeline</h2>
+          <h2>Total Sales by Month (2023–2026)</h2>
           <div class="chart-filter">
             <select id="pipelineFrom"></select>
             <span class="sep">–</span>
@@ -145,7 +145,7 @@
       </div>
       <div class="card">
         <div class="card-head">
-          <h2>Late Delivery Duration by Buyer</h2>
+          <h2>Late Delivery Duration by Buyer (2026 YTD)</h2>
           <div class="chart-filter">
             <input type="text" id="lateByBuyerSearch" placeholder="Filter buyer…">
           </div>
@@ -174,16 +174,23 @@
   </div>
 </main>
 
-<footer>Data source: live Google Sheet (Sheets API) · Re-fetched on every page load</footer>
+<footer>Data source: live Google Sheet, fetched per-sheet and aggregated client-side · Re-fetched on every page load</footer>
 
 <script>
-const SHEETS_API_KEY = "AIzaSyAaUlrdR43v7CgwqbeMf3p0yGzb07OhMcg";
 const SPREADSHEET_ID = "1m-2znh_9e_UHtuwTheWPpytuEZcKY88OaGngVAlBoFw";
-const SHEET_RANGE = "Summary!A1:AD100";
-const SHEETS_API_URL = "https://sheets.googleapis.com/v4/spreadsheets/" + SPREADSHEET_ID + "/values/" + encodeURIComponent(SHEET_RANGE) + "?key=" + SHEETS_API_KEY;
+const SHEET_NAMES = {
+  soValue: "Monthly SO Value (2025 vs 2026)",
+  ontime: "Ontime Delivery",
+  arAging: "AR Open Aging",
+  pipeline: "Actual Sales vs Forecast Pipeline",
+  newProduct: "New Products Introduced per Month"
+};
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const LATE_BUCKETS = ['>2Months','1Month','1Week','2Months','2Weeks'];
 
-// Fallback data source, used only if the Sheets API call fails.
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTHzn77J2xBJtuPT3I_umOpYNuJHWY3b2Sz_eN-V6z8YYFm7qhQt2ppQbInhTcNIuEiZUUjJfIrmfzx/pub?gid=1347234845&single=true&output=csv";
+function gvizUrl(sheetName){
+  return "https://docs.google.com/spreadsheets/d/" + SPREADSHEET_ID + "/gviz/tq?tqx=out:csv&sheet=" + encodeURIComponent(sheetName);
+}
 
 const fmtUSD = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
 const fmtUSDCompact = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',notation:'compact',maximumFractionDigits:1});
@@ -196,53 +203,10 @@ function toNum(v){
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
-function cleanMonth(v){
-  let s = String(v||'').trim();
-  s = s.replace(/^\d+\s+/, '');
-  s = s.replace(/[-\s]\d{2,4}$/, '');
-  return s;
-}
 function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
 
-function findHeaderRow(grid, headers, colStart){
-  for(let r=0; r<grid.length; r++){
-    const row = grid[r] || [];
-    let ok = true;
-    for(let i=0;i<headers.length;i++){
-      if(((row[colStart+i]||'').trim()) !== headers[i]){ ok=false; break; }
-    }
-    if(ok) return r;
-  }
-  return -1;
-}
-function extractTable(grid, headers, colStart){
-  const headerRow = findHeaderRow(grid, headers, colStart);
-  if(headerRow === -1) return { headerRow:-1, headers, rows:[] };
-  const rows = [];
-  for(let r=headerRow+1; r<grid.length; r++){
-    const row = grid[r] || [];
-    const key = (row[colStart]||'').trim();
-    if(!key) break;
-    const obj = {};
-    headers.forEach((h,i)=> obj[h]=row[colStart+i]);
-    rows.push(obj);
-  }
-  return { headerRow, headers, rows };
-}
-function seriesMap(rows, keyField, valField){
-  const m = new Map();
-  rows.forEach(r=> m.set(cleanMonth(r[keyField]), toNum(r[valField])));
-  return m;
-}
-function alignSeries(labels, map, zeroAsNull){
-  return labels.map(l=>{
-    if(!map.has(l)) return null;
-    const v = map.get(l);
-    return (zeroAsNull && v===0) ? null : v;
-  });
-}
-
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
+const BUCKET_COLORS = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.violet, PALETTE.teal]; // matches LATE_BUCKETS order
 
 const tableUIState = {};
 
@@ -332,12 +296,172 @@ function newChart(canvasId, config){
   return new Chart(canvas, config);
 }
 
+// ---------------------------------------------------------------------
+// Data layer: each of the 5 sheets below is raw, row-per-record data —
+// there is no pre-built pivot sheet anymore. Everything the dashboard
+// shows (monthly totals, buyer rankings, aging buckets, late-duration
+// breakdowns) is aggregated here, client-side, from those raw rows.
+// Sheets with a "Cek" (check) column are pre-flagged Include/Exclude by
+// the source system — Include rows are the ones already normalized to
+// a single currency/scope, so only those are used.
+// ---------------------------------------------------------------------
+
+function aggregateSoValue(rows){
+  // Columns: Year, Month, Buyer Code, Buyer Name, Sales Amount
+  const monthly = {}; // month(1-12) -> {y2025,y2026}
+  const buyers = {};  // buyer name -> {name,y2025,y2026}
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[0]===undefined) continue;
+    const year = String(r[0]||'').trim();
+    const month = parseInt(r[1],10);
+    const buyerName = (r[3]||'').trim();
+    const amt = toNum(r[4]);
+    if((year!=='2025' && year!=='2026') || !month) continue;
+    if(!monthly[month]) monthly[month] = { y2025:0, y2026:0 };
+    monthly[month]['y'+year] += amt;
+    if(buyerName){
+      if(!buyers[buyerName]) buyers[buyerName] = { name:buyerName, y2025:0, y2026:0 };
+      buyers[buyerName]['y'+year] += amt;
+    }
+  }
+  const monthlyRows = [];
+  for(let m=1;m<=12;m++){
+    const v = monthly[m] || { y2025:0, y2026:0 };
+    monthlyRows.push({ month:m, label:MONTH_NAMES[m-1], y2025:v.y2025, y2026:v.y2026 });
+  }
+  let c25=0, c26=0;
+  const cumulativeRows = monthlyRows.map(r=>{
+    c25 += r.y2025; c26 += r.y2026;
+    return { month:r.month, label:r.label, y2025:c25, y2026:c26 };
+  });
+  const buyerRows = Object.values(buyers);
+  return { monthlyRows, cumulativeRows, buyerRows };
+}
+
+function aggregateOntime(rows){
+  // Columns: Year, Month, Cek, Final Status, Max Late, Late Dur, Late Days, SO_No, Buyer Code, Buyer Name, ...
+  // One SO_No can have several delivery-order rows (partial shipments), so
+  // every count here is COUNTUNIQUE(SO_No) within its group, matching the
+  // original pivot's "COUNTUNIQUE of SO_No" columns — counting raw rows
+  // would multiply-count any order shipped in more than one DO.
+  const monthlyLate = {}, monthlyOntime = {};       // month -> Set(SO_No)
+  const lateByMonth = {};                            // "month|bucket" -> Set(SO_No)
+  const lateByBuyer = {};                            // "buyer|bucket" -> Set(SO_No)
+  const buyerNames = {};                              // buyer name (as seen) -> true, for stable iteration
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[0]===undefined) continue;
+    if((r[2]||'').trim() !== 'Include') continue;
+    if(String(r[0]||'').trim() !== '2026') continue;
+    const month = parseInt(r[1],10);
+    if(!month) continue;
+    const status = (r[3]||'').trim();
+    const soNo = (r[7]||'').trim();
+    if(!soNo) continue;
+    if(status==='Late'){
+      (monthlyLate[month] || (monthlyLate[month]=new Set())).add(soNo);
+    } else if(status==='Ontime'){
+      (monthlyOntime[month] || (monthlyOntime[month]=new Set())).add(soNo);
+    }
+    if(status==='Late'){
+      const bucket = (r[5]||'').trim();
+      if(LATE_BUCKETS.includes(bucket)){
+        const mk = month+'|'+bucket;
+        (lateByMonth[mk] || (lateByMonth[mk]=new Set())).add(soNo);
+        const buyer = (r[9]||'').trim();
+        if(buyer){
+          buyerNames[buyer] = true;
+          const bk = buyer+'|'+bucket;
+          (lateByBuyer[bk] || (lateByBuyer[bk]=new Set())).add(soNo);
+        }
+      }
+    }
+  }
+  const monthlyRows = [];
+  for(let m=1;m<=12;m++){
+    const late = monthlyLate[m] ? monthlyLate[m].size : 0;
+    const ontime = monthlyOntime[m] ? monthlyOntime[m].size : 0;
+    const total = late+ontime;
+    monthlyRows.push({ month:m, label:MONTH_NAMES[m-1], late, ontime, pct: total>0 ? ontime/total*100 : null });
+  }
+  const lateByMonthRows = [];
+  for(let m=1;m<=12;m++){
+    const row = { month:m, label:MONTH_NAMES[m-1] };
+    LATE_BUCKETS.forEach(b=>{ const s = lateByMonth[m+'|'+b]; row[b] = s ? s.size : 0; });
+    lateByMonthRows.push(row);
+  }
+  const lateByBuyerRows = Object.keys(buyerNames).map(name=>{
+    const row = { name };
+    let total = 0;
+    LATE_BUCKETS.forEach(b=>{ const s = lateByBuyer[name+'|'+b]; row[b] = s ? s.size : 0; total += row[b]; });
+    row.total = total;
+    return row;
+  });
+  return { monthlyRows, lateByMonthRows, lateByBuyerRows };
+}
+
+function aggregateArAging(rows){
+  // Columns: Year, Month, Cek, Late Days, Sort, Duration, Key, #, Document Number, Posting Date, Due Date,
+  //          Document Date, #, Customer Code, Customer Name, Cust Ref No., Document Type, Document Total,
+  //          Applied Amount, Balance Due, Currency, Remarks
+  const buckets = {}; // sort letter -> {sort,duration,balance}
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[0]===undefined) continue;
+    if((r[2]||'').trim() !== 'Include') continue;
+    const sortKey = (r[4]||'').trim();
+    if(!sortKey) continue;
+    const duration = (r[5]||'').trim();
+    const balance = toNum(r[19]);
+    if(!buckets[sortKey]) buckets[sortKey] = { sort:sortKey, duration, balance:0 };
+    buckets[sortKey].balance += balance;
+  }
+  const bucketRows = Object.values(buckets).sort((a,b)=> a.sort.localeCompare(b.sort));
+  const grandTotal = sum(bucketRows.map(r=>r.balance));
+  return { bucketRows, grandTotal };
+}
+
+function aggregatePipeline(rows){
+  // Row 0: ["", " Total ", "$amt", ..., "$amt", ""]  (sheet-computed monthly totals)
+  // Row 1: ["Customer_Code","Customer_Name","Jan-23",...,"Dec-26",""]  (header, gives month labels)
+  const totalRow = rows[0] || [];
+  const headerRow = rows[1] || [];
+  const points = [];
+  for(let c=2;c<headerRow.length;c++){
+    const label = (headerRow[c]||'').trim();
+    if(!label) continue;
+    points.push({ label, value: toNum(totalRow[c]) });
+  }
+  return points;
+}
+
+function aggregateNewProduct(rows){
+  // Columns: Year, Month, Document Number, Posting Date, Item No., Item/Service Description, Production Date
+  const monthly = {}; // month -> Set(item no.)
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[0]===undefined) continue;
+    if(String(r[0]||'').trim() !== '2026') continue;
+    const month = parseInt(r[1],10);
+    const item = (r[4]||'').trim();
+    if(!month || !item) continue;
+    if(!monthly[month]) monthly[month] = new Set();
+    monthly[month].add(item);
+  }
+  const rowsOut = [];
+  for(let m=1;m<=12;m++){
+    rowsOut.push({ month:m, label:MONTH_NAMES[m-1], count: monthly[m] ? monthly[m].size : 0 });
+  }
+  return rowsOut;
+}
+
 let DATA = null;
 
-// Each chart owns its own filter state — filters here are intentionally NOT
-// shared/global, since the underlying sheet tables don't share a common key
-// (some are per-month, some per-buyer, some neither) so a single filter bar
-// would misleadingly imply they all relate to the same slice of data.
+// Each chart owns its own filter state — filters are intentionally NOT
+// shared/global, since the underlying data doesn't share a common key
+// (some charts are per-month, some per-buyer, some neither) so a single
+// filter bar would misleadingly imply they all relate to the same slice.
 const comboFilter       = { from: 0, to: Infinity };
 const pipelineFilter    = { from: 0, to: Infinity };
 const lateByMonthFilter = { from: 0, to: Infinity };
@@ -345,36 +469,23 @@ const newProductFilter  = { from: 0, to: Infinity };
 const buyersFilter      = { query: '' };
 const lateByBuyerFilter = { query: '' };
 
-function prepareData(grid){
-  const soValue     = extractTable(grid, ['Month Final','Month','2025 ($)','2026 ($)'], 0);
-  const soAkum      = extractTable(grid, ['Month Final - Akumulasi','Month','2025 ($)','2026 ($)'], 0);
-  const ontime      = extractTable(grid, ['Month Final','Year','Month','Late','Ontime','Ontime %'], 5);
-  const pipeline    = extractTable(grid, ['Month','Permonth','3 Months ahead','4 Months ahead'], 13);
-  const arAging     = extractTable(grid, ['Key','SUM of Balance Due'], 18);
-  const buyers      = extractTable(grid, ['Buyer','Buyer Name','SUM of  2025 ($)','2026 ($)'], 0);
-  const lateByMonth = extractTable(grid, ['Month Final','Month','>2Months','1Month','1Week','2Months','2Weeks'], 5);
-  const lateByBuyer = extractTable(grid, ['Buyer Name','1Month','1Week','2Weeks','Grand Total'], 6);
-  const newProduct  = extractTable(grid, ['Month','COUNTUNIQUE of Item No.'], 1);
-  const monthOrder = soValue.rows.map(r=>cleanMonth(r['Month Final']));
-  return { soValue, soAkum, ontime, pipeline, arAging, buyers, lateByMonth, lateByBuyer, newProduct, monthOrder };
+function prepareData(sheets){
+  const so = aggregateSoValue(sheets.soValue);
+  const ontime = aggregateOntime(sheets.ontime);
+  const arAging = aggregateArAging(sheets.arAging);
+  const pipeline = aggregatePipeline(sheets.pipeline);
+  const newProduct = aggregateNewProduct(sheets.newProduct);
+  return {
+    soMonthly: so.monthlyRows, soCumulative: so.cumulativeRows, buyers: so.buyerRows,
+    ontimeMonthly: ontime.monthlyRows, lateByMonth: ontime.lateByMonthRows, lateByBuyer: ontime.lateByBuyerRows,
+    arAgingBuckets: arAging.bucketRows, arAgingGrandTotal: arAging.grandTotal,
+    pipeline,
+    newProduct
+  };
 }
 
-function monthIdx(label){
-  return DATA.monthOrder.indexOf(cleanMonth(label));
-}
-function byMonthRange(rows, field, state){
-  return rows.filter(r=>{
-    const i = monthIdx(r[field]);
-    return i===-1 ? true : (i>=state.from && i<=state.to);
-  });
-}
-// newProduct's "Month" column holds a bare month number (1-9), not a "1 Jan"
-// style label, so it's filtered by position directly instead of via monthIdx.
-function byMonthNumberRange(rows, field, state){
-  return rows.filter(r=>{
-    const i = parseInt(r[field],10) - 1;
-    return isNaN(i) ? true : (i>=state.from && i<=state.to);
-  });
+function byIndexRange(rows, state){
+  return rows.filter((r,i)=> i>=state.from && i<=state.to);
 }
 function byBuyer(rows, field, state){
   if(!state.query) return rows;
@@ -382,27 +493,25 @@ function byBuyer(rows, field, state){
   return rows.filter(r=>String(r[field]||'').toLowerCase().includes(q));
 }
 
-function populateMonthSelect(selId, defaultIdx){
+function populateSelect(selId, labels, defaultIdx){
   const sel = document.getElementById(selId);
   sel.innerHTML = '';
-  DATA.monthOrder.forEach((m,i)=>{
+  labels.forEach((m,i)=>{
     const o = document.createElement('option'); o.value=i; o.textContent=m; sel.appendChild(o);
   });
   sel.value = defaultIdx;
 }
-
-// Re-populates a chart's month dropdowns against the latest month list and
-// clamps its filter state into range. Safe to call on every data refresh:
-// state.to starts at Infinity, which clamps to "always the latest month" and
-// keeps tracking newly-appeared months until the user pins a specific one.
-function syncMonthFilterUI(fromId, toId, state){
-  state.from = Math.max(0, Math.min(state.from, DATA.monthOrder.length-1));
-  state.to = Math.max(0, Math.min(state.to, DATA.monthOrder.length-1));
-  populateMonthSelect(fromId, state.from);
-  populateMonthSelect(toId, state.to);
+// Re-populates a chart's dropdowns against the latest label list and clamps
+// its filter state into range. Safe to call on every refresh: state.to
+// starts at Infinity, which clamps to "always the latest point" until the
+// user pins a specific one.
+function syncFilterUI(fromId, toId, state, labels){
+  state.from = Math.max(0, Math.min(state.from, labels.length-1));
+  state.to = Math.max(0, Math.min(state.to, labels.length-1));
+  populateSelect(fromId, labels, state.from);
+  populateSelect(toId, labels, state.to);
 }
-
-function wireMonthFilter(fromId, toId, resetId, state, renderFn){
+function wireIndexFilter(fromId, toId, resetId, state, labelsFn, renderFn){
   document.getElementById(fromId).addEventListener('change', e=>{
     const v = parseInt(e.target.value,10);
     state.from = v; if(state.to < v){ state.to = v; document.getElementById(toId).value = v; }
@@ -414,13 +523,14 @@ function wireMonthFilter(fromId, toId, resetId, state, renderFn){
     renderFn();
   });
   document.getElementById(resetId).addEventListener('click', ()=>{
-    state.from = 0; state.to = DATA.monthOrder.length-1;
+    const len = labelsFn().length;
+    state.from = 0; state.to = len-1;
     document.getElementById(fromId).value = 0;
-    document.getElementById(toId).value = DATA.monthOrder.length-1;
+    document.getElementById(toId).value = len-1;
     renderFn();
   });
 }
-function jumpToMonth(fromId, toId, state, idx, renderFn){
+function jumpToIndex(fromId, toId, state, idx, renderFn){
   state.from = idx; state.to = idx;
   document.getElementById(fromId).value = idx;
   document.getElementById(toId).value = idx;
@@ -429,7 +539,6 @@ function jumpToMonth(fromId, toId, state, idx, renderFn){
   // doing that synchronously crashes Chart.js's in-flight event handling.
   setTimeout(renderFn, 0);
 }
-
 function wireBuyerFilter(inputId, state, renderFn){
   document.getElementById(inputId).addEventListener('input', e=>{
     state.query = e.target.value;
@@ -443,31 +552,22 @@ function jumpToBuyer(inputId, state, name, renderFn){
 }
 
 function renderKPIs(){
-  const { soValue, ontime, arAging, buyers, lateByBuyer, newProduct } = DATA;
+  const { soMonthly, ontimeMonthly, arAgingGrandTotal, buyers, newProduct } = DATA;
 
-  const total2026 = sum(soValue.rows.map(r=>toNum(r['2026 ($)'])));
-  const ytdRows = soValue.rows.filter(r=>toNum(r['2026 ($)'])>0);
-  const ytd2026 = sum(ytdRows.map(r=>toNum(r['2026 ($)'])));
-  const ytd2025Same = sum(ytdRows.map(r=>toNum(r['2025 ($)'])));
+  const total2026 = sum(soMonthly.map(r=>r.y2026));
+  const ytdRows = soMonthly.filter(r=>r.y2026>0);
+  const ytd2026 = sum(ytdRows.map(r=>r.y2026));
+  const ytd2025Same = sum(ytdRows.map(r=>r.y2025));
   const yoyPct = ytd2025Same>0 ? ((ytd2026-ytd2025Same)/ytd2025Same*100) : null;
 
-  const totalOntime = sum(ontime.rows.map(r=>toNum(r['Ontime'])));
-  const totalLate = sum(ontime.rows.map(r=>toNum(r['Late'])));
+  const totalOntime = sum(ontimeMonthly.map(r=>r.ontime));
+  const totalLate = sum(ontimeMonthly.map(r=>r.late));
   const ontimePct = (totalOntime+totalLate)>0 ? totalOntime/(totalOntime+totalLate)*100 : null;
 
-  const arGrandTotal = arAging.rows.find(r=>String(r['Key']).trim().toLowerCase()==='grand total');
-  const totalAR = arGrandTotal ? toNum(arGrandTotal['SUM of Balance Due'])
-    : sum(arAging.rows.filter(r=>String(r['Key']).trim().toLowerCase()!=='grand total').map(r=>toNum(r['SUM of Balance Due'])));
-
   let topBuyer = null;
-  buyers.rows.forEach(r=>{ const v=toNum(r['2026 ($)']); if(!topBuyer||v>topBuyer.v) topBuyer={name:r['Buyer Name'],v}; });
+  buyers.forEach(r=>{ if(!topBuyer || r.y2026>topBuyer.y2026) topBuyer = r; });
 
-  const lateGrandTotalRow = lateByBuyer.rows.find(r=>String(r['Buyer Name']).trim().toLowerCase()==='grand total');
-  const lateByBuyerNoTotal = lateByBuyer.rows.filter(r=>String(r['Buyer Name']).trim().toLowerCase()!=='grand total');
-  const totalLateOrders = lateGrandTotalRow ? toNum(lateGrandTotalRow['Grand Total'])
-    : sum(lateByBuyerNoTotal.map(r=>toNum(r['Grand Total'])));
-
-  const totalNewProducts = sum(newProduct.rows.map(r=>toNum(r['COUNTUNIQUE of Item No.'])));
+  const totalNewProducts = sum(newProduct.map(r=>r.count));
 
   document.getElementById('kpiTotal2026').textContent = fmtUSDCompact.format(total2026);
   document.getElementById('kpiTotal2026Sub').textContent = fmtUSD.format(total2026);
@@ -476,20 +576,20 @@ function renderKPIs(){
   document.getElementById('kpiOntime').textContent = fmtPct(ontimePct);
   document.getElementById('kpiOntime').style.color = ontimePct===null?'inherit':(ontimePct>=70?PALETTE.green:ontimePct>=40?PALETTE.amber:PALETTE.rose);
   document.getElementById('kpiOntimeSub').textContent = totalOntime+' ontime / '+totalLate+' late';
-  document.getElementById('kpiAR').textContent = fmtUSDCompact.format(totalAR);
-  document.getElementById('kpiTopBuyer').textContent = topBuyer ? fmtUSDCompact.format(topBuyer.v) : '–';
+  document.getElementById('kpiAR').textContent = fmtUSDCompact.format(arAgingGrandTotal);
+  document.getElementById('kpiTopBuyer').textContent = topBuyer ? fmtUSDCompact.format(topBuyer.y2026) : '–';
   document.getElementById('kpiTopBuyerSub').textContent = topBuyer ? topBuyer.name : '';
-  document.getElementById('kpiLateCount').textContent = totalLateOrders;
+  document.getElementById('kpiLateCount').textContent = totalLate;
   document.getElementById('kpiNewProducts').textContent = totalNewProducts;
 }
 
 function renderCombo(){
-  const rows = byMonthRange(DATA.soValue.rows, 'Month Final', comboFilter);
-  const ontimeRows = byMonthRange(DATA.ontime.rows, 'Month Final', comboFilter);
-  const labels = rows.map(r=>cleanMonth(r['Month Final']));
-  const so2025 = rows.map(r=>toNum(r['2025 ($)']));
-  const so2026 = rows.map(r=>toNum(r['2026 ($)'])).map(v=>v>0?v:null);
-  const ontimeSeries = alignSeries(labels, seriesMap(ontimeRows,'Month Final','Ontime %'));
+  const rows = byIndexRange(DATA.soMonthly, comboFilter);
+  const ontimeRows = byIndexRange(DATA.ontimeMonthly, comboFilter);
+  const labels = rows.map(r=>r.label);
+  const so2025 = rows.map(r=>r.y2025);
+  const so2026 = rows.map(r=>r.y2026).map(v=>v>0?v:null);
+  const ontimeSeries = ontimeRows.map(r=>r.pct);
   newChart('chartCombo', {
     data: {
       labels,
@@ -502,7 +602,7 @@ function renderCombo(){
     options: {
       responsive:true, maintainAspectRatio:false,
       interaction:{ mode:'index', intersect:false },
-      onClick:(evt, els)=>{ if(els.length) jumpToMonth('comboFrom','comboTo', comboFilter, monthIdx(labels[els[0].index]), renderCombo); },
+      onClick:(evt, els)=>{ if(els.length) jumpToIndex('comboFrom','comboTo', comboFilter, comboFilter.from+els[0].index, renderCombo); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{
         y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } },
@@ -517,13 +617,12 @@ function renderCombo(){
 }
 
 function renderCumulative(){
-  const { soAkum } = DATA;
-  const labels = soAkum.rows.map(r=>cleanMonth(r['Month Final - Akumulasi']));
+  const rows = DATA.soCumulative;
   newChart('chartCumulative', {
     type:'line',
-    data:{ labels, datasets:[
-      { label:'2025', data:soAkum.rows.map(r=>toNum(r['2025 ($)'])), borderColor:PALETTE.slate, backgroundColor:PALETTE.slate, tension:.25 },
-      { label:'2026', data:soAkum.rows.map(r=>toNum(r['2026 ($)'])), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, tension:.25 }
+    data:{ labels: rows.map(r=>r.label), datasets:[
+      { label:'2025', data:rows.map(r=>r.y2025), borderColor:PALETTE.slate, backgroundColor:PALETTE.slate, tension:.25 },
+      { label:'2026', data:rows.map(r=>r.y2026), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, tension:.25 }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
@@ -533,34 +632,27 @@ function renderCumulative(){
 }
 
 function renderPipeline(){
-  const rows = byMonthRange(DATA.pipeline.rows, 'Month', pipelineFilter);
-  const soValueRows = byMonthRange(DATA.soValue.rows, 'Month Final', pipelineFilter);
-  const labels = rows.map(r=>cleanMonth(r['Month']));
-  const actual = alignSeries(labels, seriesMap(soValueRows,'Month Final','2026 ($)'), true);
-  const permonth = rows.map(r=>toNum(r['Permonth']));
-  const ahead3 = rows.map(r=>toNum(r['3 Months ahead']));
-  const ahead4 = rows.map(r=>toNum(r['4 Months ahead']));
+  const rows = byIndexRange(DATA.pipeline, pipelineFilter);
   newChart('chartPipeline', {
     type:'line',
-    data:{ labels, datasets:[
-      { label:'Actual 2026', data:actual, borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, borderWidth:3, spanGaps:false, tension:.2 },
-      { label:'Per Month Forecast', data:permonth, borderColor:PALETTE.amber, backgroundColor:PALETTE.amber, borderDash:[5,3], tension:.2 },
-      { label:'3 Months Ahead', data:ahead3, borderColor:PALETTE.violet, backgroundColor:PALETTE.violet, borderDash:[2,3], tension:.2 },
-      { label:'4 Months Ahead', data:ahead4, borderColor:PALETTE.rose, backgroundColor:PALETTE.rose, borderDash:[2,3], tension:.2 }
+    data:{ labels: rows.map(r=>r.label), datasets:[
+      { label:'Total Sales', data: rows.map(r=>r.value), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue, borderWidth:2, tension:.2, pointRadius:2 }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
+      onClick:(evt, els)=>{ if(els.length) jumpToIndex('pipelineFrom','pipelineTo', pipelineFilter, pipelineFilter.from+els[0].index, renderPipeline); },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
-      plugins:{ tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+(ctx.parsed.y===null?'–':fmtUSD.format(ctx.parsed.y)) } } }
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.y) } } }
     }
   });
 }
 
 function renderAging(){
-  const rows = DATA.arAging.rows.filter(r=>String(r['Key']).trim().toLowerCase()!=='grand total');
+  const rows = DATA.arAgingBuckets;
   newChart('chartAging', {
     type:'bar',
-    data:{ labels: rows.map(r=>r['Key']), datasets:[
-      { label:'Balance Due', data: rows.map(r=>toNum(r['SUM of Balance Due'])), backgroundColor: rows.map((_,i)=>`hsl(${10+i*16},70%,50%)`) }
+    data:{ labels: rows.map(r=>r.duration), datasets:[
+      { label:'Balance Due', data: rows.map(r=>r.balance), backgroundColor: rows.map((_,i)=>`hsl(${10+i*16},70%,50%)`) }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } } },
@@ -570,15 +662,15 @@ function renderAging(){
 }
 
 function renderBuyers(){
-  const filtered = byBuyer(DATA.buyers.rows, 'Buyer Name', buyersFilter);
-  const rows = [...filtered].sort((a,b)=>toNum(b['2026 ($)'])-toNum(a['2026 ($)']));
+  const filtered = byBuyer(DATA.buyers, 'name', buyersFilter);
+  const rows = [...filtered].sort((a,b)=>b.y2026-a.y2026);
   newChart('chartBuyers', {
     type:'bar',
-    data:{ labels: rows.map(r=>r['Buyer Name']), datasets:[
-      { label:'2026 ($)', data: rows.map(r=>toNum(r['2026 ($)'])), backgroundColor:PALETTE.blue }
+    data:{ labels: rows.map(r=>r.name), datasets:[
+      { label:'2026 ($)', data: rows.map(r=>r.y2026), backgroundColor:PALETTE.blue }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToBuyer('buyersSearch', buyersFilter, rows[els[0].index]['Buyer Name'], renderBuyers); },
+      onClick:(evt, els)=>{ if(els.length) jumpToBuyer('buyersSearch', buyersFilter, rows[els[0].index].name, renderBuyers); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } } },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -587,15 +679,13 @@ function renderBuyers(){
 }
 
 function renderLateByMonth(){
-  const rows = byMonthRange(DATA.lateByMonth.rows, 'Month Final', lateByMonthFilter);
-  const labels = rows.map(r=>cleanMonth(r['Month Final']));
-  const cats = ['>2Months','1Month','1Week','2Months','2Weeks'];
-  const colors = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.violet, PALETTE.teal];
+  const rows = byIndexRange(DATA.lateByMonth, lateByMonthFilter);
+  const labels = rows.map(r=>r.label);
   newChart('chartLateByMonth', {
     type:'bar',
-    data:{ labels, datasets: cats.map((c,i)=>({ label:c, data: rows.map(r=>toNum(r[c])), backgroundColor: colors[i] })) },
+    data:{ labels, datasets: LATE_BUCKETS.map((c,i)=>({ label:c, data: rows.map(r=>r[c]), backgroundColor: BUCKET_COLORS[i] })) },
     options:{ responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToMonth('lateByMonthFrom','lateByMonthTo', lateByMonthFilter, monthIdx(labels[els[0].index]), renderLateByMonth); },
+      onClick:(evt, els)=>{ if(els.length) jumpToIndex('lateByMonthFrom','lateByMonthTo', lateByMonthFilter, lateByMonthFilter.from+els[0].index, renderLateByMonth); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } }
     }
@@ -603,16 +693,15 @@ function renderLateByMonth(){
 }
 
 function renderLateByBuyer(){
-  const lateByBuyerNoTotal = DATA.lateByBuyer.rows.filter(r=>String(r['Buyer Name']).trim().toLowerCase()!=='grand total');
-  const filtered = byBuyer(lateByBuyerNoTotal, 'Buyer Name', lateByBuyerFilter);
-  const rows = [...filtered].sort((a,b)=>toNum(b['Grand Total'])-toNum(a['Grand Total']));
+  const filtered = byBuyer(DATA.lateByBuyer, 'name', lateByBuyerFilter);
+  const rows = [...filtered].sort((a,b)=>b.total-a.total);
   newChart('chartLateByBuyer', {
     type:'bar',
-    data:{ labels: rows.map(r=>r['Buyer Name']), datasets:[
-      { label:'Late Orders', data: rows.map(r=>toNum(r['Grand Total'])), backgroundColor:PALETTE.rose }
+    data:{ labels: rows.map(r=>r.name), datasets:[
+      { label:'Late Orders', data: rows.map(r=>r.total), backgroundColor:PALETTE.rose }
     ]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToBuyer('lateByBuyerSearch', lateByBuyerFilter, rows[els[0].index]['Buyer Name'], renderLateByBuyer); },
+      onClick:(evt, els)=>{ if(els.length) jumpToBuyer('lateByBuyerSearch', lateByBuyerFilter, rows[els[0].index].name, renderLateByBuyer); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{ legend:{display:false} },
       scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
@@ -621,18 +710,14 @@ function renderLateByBuyer(){
 }
 
 function renderNewProduct(){
-  const rows = byMonthNumberRange(DATA.newProduct.rows, 'Month', newProductFilter);
-  const labels = rows.map(r=>{
-    const i = parseInt(r['Month'],10)-1;
-    return DATA.monthOrder[i] || r['Month'];
-  });
+  const rows = byIndexRange(DATA.newProduct, newProductFilter);
   newChart('chartNewProduct', {
     type:'bar',
-    data:{ labels, datasets:[
-      { label:'New Items', data: rows.map(r=>toNum(r['COUNTUNIQUE of Item No.'])), backgroundColor:PALETTE.green }
+    data:{ labels: rows.map(r=>r.label), datasets:[
+      { label:'New Items', data: rows.map(r=>r.count), backgroundColor:PALETTE.green }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
-      onClick:(evt, els)=>{ if(els.length) jumpToMonth('newProductFrom','newProductTo', newProductFilter, parseInt(rows[els[0].index]['Month'],10)-1, renderNewProduct); },
+      onClick:(evt, els)=>{ if(els.length) jumpToIndex('newProductFrom','newProductTo', newProductFilter, newProductFilter.from+els[0].index, renderNewProduct); },
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       plugins:{ legend:{display:false} },
       scales:{ y:{ beginAtZero:true, ticks:{ stepSize:5 } } }
@@ -641,18 +726,36 @@ function renderNewProduct(){
 }
 
 function renderRawTables(){
-  const { soValue, soAkum, ontime, pipeline, arAging, buyers, lateByMonth, lateByBuyer, newProduct } = DATA;
   const rawContainer = document.getElementById('rawTables');
   rawContainer.innerHTML = '';
-  renderRawTable(rawContainer, 'soValue', '1. Monthly SO Value', soValue.headers, soValue.rows);
-  renderRawTable(rawContainer, 'soAkum', '1b. Cumulative SO Value (Akumulasi)', soAkum.headers, soAkum.rows);
-  renderRawTable(rawContainer, 'ontime', '2. Ontime Delivery', ontime.headers, ontime.rows);
-  renderRawTable(rawContainer, 'pipeline', '3. Sales 3 & 4 Months Ahead', pipeline.headers, pipeline.rows);
-  renderRawTable(rawContainer, 'arAging', '4. AR Open Aging', arAging.headers, arAging.rows);
-  renderRawTable(rawContainer, 'buyers', '5. Buyers (2025 vs 2026)', buyers.headers, buyers.rows);
-  renderRawTable(rawContainer, 'lateByMonth', '6. Late Delivery Duration by Month', lateByMonth.headers, lateByMonth.rows);
-  renderRawTable(rawContainer, 'lateByBuyer', '7. Late Delivery Duration by Buyer', lateByBuyer.headers, lateByBuyer.rows);
-  renderRawTable(rawContainer, 'newProduct', '8. Monthly New Product', newProduct.headers, newProduct.rows);
+
+  renderRawTable(rawContainer, 'soMonthly', '1. Monthly SO Value', ['Month','2025 ($)','2026 ($)'],
+    DATA.soMonthly.map(r=>({ 'Month':r.label, '2025 ($)':fmtUSD.format(r.y2025), '2026 ($)':fmtUSD.format(r.y2026) })));
+
+  renderRawTable(rawContainer, 'soCumulative', '1b. Cumulative SO Value', ['Month','2025 ($)','2026 ($)'],
+    DATA.soCumulative.map(r=>({ 'Month':r.label, '2025 ($)':fmtUSD.format(r.y2025), '2026 ($)':fmtUSD.format(r.y2026) })));
+
+  renderRawTable(rawContainer, 'ontime', '2. Ontime Delivery', ['Month','Late','Ontime','Ontime %'],
+    DATA.ontimeMonthly.map(r=>({ 'Month':r.label, 'Late':r.late, 'Ontime':r.ontime, 'Ontime %':fmtPct(r.pct) })));
+
+  renderRawTable(rawContainer, 'pipeline', '3. Total Sales by Month (2023–2026)', ['Month','Total Sales ($)'],
+    DATA.pipeline.map(r=>({ 'Month':r.label, 'Total Sales ($)':fmtUSD.format(r.value) })));
+
+  renderRawTable(rawContainer, 'arAging', '4. AR Open Aging', ['Key','Balance Due'],
+    [...DATA.arAgingBuckets.map(r=>({ 'Key':r.sort+'. '+r.duration, 'Balance Due':fmtUSD.format(r.balance) })),
+     { 'Key':'Grand Total', 'Balance Due':fmtUSD.format(DATA.arAgingGrandTotal) }]);
+
+  renderRawTable(rawContainer, 'buyers', '5. Buyers (2025 vs 2026)', ['Buyer Name','2025 ($)','2026 ($)'],
+    DATA.buyers.map(r=>({ 'Buyer Name':r.name, '2025 ($)':fmtUSD.format(r.y2025), '2026 ($)':fmtUSD.format(r.y2026) })));
+
+  renderRawTable(rawContainer, 'lateByMonth', '6. Late Delivery Duration by Month', ['Month',...LATE_BUCKETS],
+    DATA.lateByMonth.map(r=>{ const o={'Month':r.label}; LATE_BUCKETS.forEach(b=>o[b]=r[b]); return o; }));
+
+  renderRawTable(rawContainer, 'lateByBuyer', '7. Late Delivery Duration by Buyer (2026 YTD)', ['Buyer Name',...LATE_BUCKETS,'Grand Total'],
+    DATA.lateByBuyer.map(r=>{ const o={'Buyer Name':r.name}; LATE_BUCKETS.forEach(b=>o[b]=r[b]); o['Grand Total']=r.total; return o; }));
+
+  renderRawTable(rawContainer, 'newProduct', '8. Monthly New Product', ['Month','COUNTUNIQUE of Item No.'],
+    DATA.newProduct.map(r=>({ 'Month':r.label, 'COUNTUNIQUE of Item No.':r.count })));
 }
 
 function renderAll(){
@@ -668,54 +771,31 @@ function renderAll(){
   renderRawTables();
 }
 
-const PROXY_URL = 'sheet.csv';
-
 function showFetchError(detail){
   const statusEl = document.getElementById('status');
   statusEl.className = 'error';
   statusEl.innerHTML =
-    '<strong>Could not load data (Sheets API and CSV fallback both failed).</strong><br>' +
+    '<strong>Could not load data from Google Sheets.</strong><br>' +
     'Reason: ' + detail + '<br><br>' +
     'Things to check:<br>' +
-    '&bull; Is the Sheets API key still valid and unrestricted for this origin? Check APIs &amp; Services → Credentials in Google Cloud Console.<br>' +
-    '&bull; Is <code>proxy_server.py</code> running? Start it from this folder with <code>python proxy_server.py</code>, then open <code>http://localhost:8000/dashboard.html</code>.<br>' +
-    '&bull; Open <a href="' + CSV_URL + '" target="_blank" rel="noopener">the CSV link</a> directly in this browser to confirm the sheet is still published.<br>' +
-    '&bull; Press F12 → Network tab, click Refresh Now, and check the failed request\'s status for a "net::ERR_..." reason.';
+    '&bull; Is the spreadsheet still shared as "Anyone with the link can view"? The dashboard reads it live via Google\'s CSV export, which needs public/link view access.<br>' +
+    '&bull; Have any of these sheet tabs been renamed? The dashboard looks them up by exact name: ' + Object.values(SHEET_NAMES).map(n=>'"'+n+'"').join(', ') + '.<br>' +
+    '&bull; Press F12 → Network tab, click Refresh Now, and check the failed request\'s status.';
 }
 
-function tryFetch(url){
-  const bustUrl = url + (url.includes('?') ? '&' : '?') + '_ts=' + Date.now();
-  return fetch(bustUrl, { cache: 'no-store' }).then(function(res){
-    if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+function fetchSheet(sheetName){
+  const url = gvizUrl(sheetName) + '&_ts=' + Date.now();
+  return fetch(url, { cache:'no-store' }).then(res=>{
+    if(!res.ok) throw new Error('HTTP ' + res.status + ' fetching sheet "' + sheetName + '"');
     return res.text();
-  });
-}
-
-function fetchViaSheetsApi(){
-  return fetch(SHEETS_API_URL, { cache: 'no-store' }).then(function(res){
-    return res.json().then(function(json){
-      if(!res.ok) throw new Error((json.error && json.error.message) || ('HTTP ' + res.status));
-      return json.values || [];
-    });
-  });
-}
-
-function fetchViaCsvFallback(){
-  return tryFetch(CSV_URL)
-    .catch(function(directErr){
-      console.warn('Direct CSV fetch failed, falling back to local proxy (sheet.csv):', directErr);
-      return tryFetch(PROXY_URL);
-    })
-    .then(function(csvText){
-      return Papa.parse(csvText, { skipEmptyLines: false }).data;
-    });
+  }).then(text=> Papa.parse(text, { skipEmptyLines:false }).data);
 }
 
 function wireAllFilters(){
-  wireMonthFilter('comboFrom', 'comboTo', 'comboReset', comboFilter, renderCombo);
-  wireMonthFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, renderPipeline);
-  wireMonthFilter('lateByMonthFrom', 'lateByMonthTo', 'lateByMonthReset', lateByMonthFilter, renderLateByMonth);
-  wireMonthFilter('newProductFrom', 'newProductTo', 'newProductReset', newProductFilter, renderNewProduct);
+  wireIndexFilter('comboFrom', 'comboTo', 'comboReset', comboFilter, ()=>DATA.soMonthly, renderCombo);
+  wireIndexFilter('pipelineFrom', 'pipelineTo', 'pipelineReset', pipelineFilter, ()=>DATA.pipeline, renderPipeline);
+  wireIndexFilter('lateByMonthFrom', 'lateByMonthTo', 'lateByMonthReset', lateByMonthFilter, ()=>DATA.lateByMonth, renderLateByMonth);
+  wireIndexFilter('newProductFrom', 'newProductTo', 'newProductReset', newProductFilter, ()=>DATA.newProduct, renderNewProduct);
   wireBuyerFilter('buyersSearch', buyersFilter, renderBuyers);
   wireBuyerFilter('lateByBuyerSearch', lateByBuyerFilter, renderLateByBuyer);
 }
@@ -730,33 +810,33 @@ function loadData(){
   statusEl.style.display = 'block';
   dashEl.style.display = 'none';
 
-  fetchViaSheetsApi()
-    .catch(function(apiErr){
-      console.warn('Sheets API fetch failed, falling back to published CSV:', apiErr);
-      return fetchViaCsvFallback();
-    })
-    .then(function(grid){
-      try{
-        DATA = prepareData(grid);
-        syncMonthFilterUI('comboFrom', 'comboTo', comboFilter);
-        syncMonthFilterUI('pipelineFrom', 'pipelineTo', pipelineFilter);
-        syncMonthFilterUI('lateByMonthFrom', 'lateByMonthTo', lateByMonthFilter);
-        syncMonthFilterUI('newProductFrom', 'newProductTo', newProductFilter);
-        if(!filtersWired){ wireAllFilters(); filtersWired = true; }
-        renderAll();
-        statusEl.style.display = 'none';
-        dashEl.style.display = 'block';
-        document.getElementById('refreshedAt').textContent = 'Last refreshed: ' + new Date().toLocaleString();
-      }catch(e){
-        statusEl.className = 'error';
-        statusEl.textContent = 'Loaded the data but could not parse the expected table layout. Details: ' + e.message;
-        console.error(e);
-      }
-    })
-    .catch(function(err){
-      console.error('All data sources failed:', err);
-      showFetchError(err.message || String(err));
-    });
+  Promise.all([
+    fetchSheet(SHEET_NAMES.soValue),
+    fetchSheet(SHEET_NAMES.ontime),
+    fetchSheet(SHEET_NAMES.arAging),
+    fetchSheet(SHEET_NAMES.pipeline),
+    fetchSheet(SHEET_NAMES.newProduct)
+  ]).then(function([soValue, ontime, arAging, pipeline, newProduct]){
+    try{
+      DATA = prepareData({ soValue, ontime, arAging, pipeline, newProduct });
+      syncFilterUI('comboFrom', 'comboTo', comboFilter, DATA.soMonthly.map(r=>r.label));
+      syncFilterUI('pipelineFrom', 'pipelineTo', pipelineFilter, DATA.pipeline.map(r=>r.label));
+      syncFilterUI('lateByMonthFrom', 'lateByMonthTo', lateByMonthFilter, DATA.lateByMonth.map(r=>r.label));
+      syncFilterUI('newProductFrom', 'newProductTo', newProductFilter, DATA.newProduct.map(r=>r.label));
+      if(!filtersWired){ wireAllFilters(); filtersWired = true; }
+      renderAll();
+      statusEl.style.display = 'none';
+      dashEl.style.display = 'block';
+      document.getElementById('refreshedAt').textContent = 'Last refreshed: ' + new Date().toLocaleString();
+    }catch(e){
+      statusEl.className = 'error';
+      statusEl.textContent = 'Loaded the sheets but could not process the data. Details: ' + e.message;
+      console.error(e);
+    }
+  }).catch(function(err){
+    console.error('Fetching sheet data failed:', err);
+    showFetchError(err.message || String(err));
+  });
 }
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
