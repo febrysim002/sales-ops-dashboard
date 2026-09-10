@@ -299,6 +299,9 @@ function gvizUrl(sheetName){
 const fmtUSD = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
 const fmtUSDCompact = new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',notation:'compact',maximumFractionDigits:1});
 const fmtPct = (n) => (n===null||n===undefined) ? '–' : n.toFixed(1)+'%';
+// Tooltip filter shared by the "hover shows every series at this x" charts,
+// so a zero-value series doesn't clutter the tooltip alongside the real ones.
+const hideZeroTooltip = (ctx) => ctx.parsed.y !== 0 && ctx.parsed.y !== null;
 
 function toNum(v){
   if(v===undefined||v===null) return 0;
@@ -947,7 +950,7 @@ function renderCombo(){
         y1:{ position:'right', beginAtZero:true, max:100, grid:{drawOnChartArea:false}, ticks:{ callback:v=>v+'%' } }
       },
       plugins:{
-        tooltip:{ callbacks:{ label:(ctx)=>{
+        tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>{
           if(ctx.dataset.label==='Ontime %') return ctx.dataset.label+': '+(ctx.parsed.y===null?'–':ctx.parsed.y.toFixed(1)+'%');
           return ctx.dataset.label+': '+(ctx.parsed.y===null?'–':fmtUSD.format(ctx.parsed.y));
         }}},
@@ -982,7 +985,7 @@ function renderCumulative(){
       interaction:{ mode:'index', intersect:false },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
-        tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
+        tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
         datalabels:{
           display: ctx => LABELS.cumulative && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
@@ -1012,7 +1015,7 @@ function renderPipeline(){
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } },
       plugins:{
         legend:{display:true, position:'top'},
-        tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
+        tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>ctx.dataset.label+': '+fmtUSD.format(ctx.parsed.y) } },
         datalabels:{
           display: ctx => LABELS.pipeline && ctx.dataset.data[ctx.dataIndex]!==null && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
@@ -1113,7 +1116,7 @@ function renderLateByMonth(){
       onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       scales:{ x:{ stacked:true }, y:{ stacked:true, beginAtZero:true } },
       plugins:{
-        tooltip:{ callbacks:{ label:(ctx)=>ctx.dataset.label+': '+ctx.parsed.y } },
+        tooltip:{ filter: hideZeroTooltip, callbacks:{ label:(ctx)=>ctx.dataset.label+': '+ctx.parsed.y } },
         datalabels:{
           display: ctx => LABELS.lateByMonth && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
