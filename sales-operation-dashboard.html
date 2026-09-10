@@ -24,7 +24,7 @@
   #status.loading{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
   #status.error{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;}
   #dashboard{display:none;}
-  .kpi-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px;}
+  .kpi-toolbar{display:flex;justify-content:flex-end;gap:18px;margin-bottom:8px;}
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px;}
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
   .kpi-head{display:flex;justify-content:space-between;align-items:flex-start;gap:6px;}
@@ -102,6 +102,7 @@
   <div id="dashboard">
     <div class="kpi-toolbar">
       <label class="lbl-toggle"><input type="checkbox" id="showAllMoneyKpis"> Show monetary values</label>
+      <label class="lbl-toggle"><input type="checkbox" id="showAllDataLabels"> Show all data labels</label>
     </div>
     <div class="kpi-grid">
       <div class="kpi">
@@ -343,14 +344,22 @@ function vBarLabelFits(ctx, fontSize){
   if(!el) return true;
   return Math.abs(el.y - el.base) >= fontSize * 1.8;
 }
-function hBarLabelFits(ctx, fontSize, text){
+// For a horizontal bar, anchor:'end' sits AT the bar's tip — which for a
+// short/near-zero-value bar is itself right next to the axis, so just
+// flipping anchor doesn't actually clear the category labels. This instead
+// computes an offset that guarantees the label lands at least MIN_CLEARANCE
+// past the axis regardless of how short the bar is.
+const H_BAR_LABEL_MIN_CLEARANCE = 14;
+function hBarLabelPlacement(ctx, fontSize, text){
   const el = ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex];
-  if(!el) return true;
+  if(!el) return { anchor:'center', align:'center', offset:0 };
   const c2d = ctx.chart.ctx;
   c2d.save(); c2d.font = "600 "+fontSize+"px 'Segoe UI', sans-serif";
   const textWidth = c2d.measureText(String(text)).width;
   c2d.restore();
-  return Math.abs(el.x - el.base) >= textWidth + 10;
+  const barLen = Math.abs(el.x - el.base);
+  if(barLen >= textWidth + 10) return { anchor:'center', align:'center', offset:0 };
+  return { anchor:'end', align:'end', offset: Math.max(4, H_BAR_LABEL_MIN_CLEARANCE - barLen) };
 }
 
 const PALETTE = { blue:'#2563eb', slate:'#94a3b8', teal:'#0d9488', amber:'#d97706', rose:'#e11d48', violet:'#7c3aed', green:'#16a34a', sky:'#0284c7' };
@@ -1060,9 +1069,9 @@ function renderAging(){
           display: ctx => LABELS.aging && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
           font:{ size:fs, weight:'600' }, color:'#1f2937',
-          anchor: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          align: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          offset: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
+          anchor: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).anchor,
+          align: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).align,
+          offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1092,9 +1101,9 @@ function renderAgingByBuyer(){
           display: ctx => LABELS.agingByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
           font:{ size:fs, weight:'600' }, color:'#1f2937',
-          anchor: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          align: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          offset: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
+          anchor: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).anchor,
+          align: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).align,
+          offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1121,9 +1130,9 @@ function renderBuyers(){
           display: ctx => LABELS.buyers && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>fmtUSDCompact.format(v),
           font:{ size:fs, weight:'600' }, color:'#1f2937',
-          anchor: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          align: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          offset: ctx => hBarLabelFits(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
+          anchor: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).anchor,
+          align: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).align,
+          offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
@@ -1176,9 +1185,9 @@ function renderLateByBuyer(){
           display: ctx => LABELS.lateByBuyer && ctx.dataset.data[ctx.dataIndex]!==0,
           formatter: v=>v,
           font:{ size:fs, weight:'600' }, color:'#000',
-          anchor: ctx => hBarLabelFits(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          align: ctx => hBarLabelFits(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])) ? 'center' : 'end',
-          offset: ctx => hBarLabelFits(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])) ? 0 : 4
+          anchor: ctx => hBarLabelPlacement(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])).anchor,
+          align: ctx => hBarLabelPlacement(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])).align,
+          offset: ctx => hBarLabelPlacement(ctx, fs, String(ctx.dataset.data[ctx.dataIndex])).offset
         }
       },
       scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } }
@@ -1324,6 +1333,23 @@ function wireAllFilters(){
   wireLabelToggle('newProductLabels', 'newProduct', renderNewProduct);
 
   document.getElementById('showAllMoneyKpis').addEventListener('change', applyKpiVisibility);
+
+  // Bulk on/off for every chart's own "Labels" checkbox — a convenience
+  // action, not a persistent master switch, so each chart's individual
+  // checkbox keeps working on its own afterward.
+  const labelCheckboxIds = {
+    combo:'comboLabels', cumulative:'cumulativeLabels', pipeline:'pipelineLabels',
+    aging:'agingLabels', agingByBuyer:'agingByBuyerLabels', buyers:'buyersLabels',
+    lateByMonth:'lateByMonthLabels', lateByBuyer:'lateByBuyerLabels', newProduct:'newProductLabels'
+  };
+  document.getElementById('showAllDataLabels').addEventListener('change', e=>{
+    const show = e.target.checked;
+    Object.entries(labelCheckboxIds).forEach(([key, checkboxId])=>{
+      LABELS[key] = show;
+      document.getElementById(checkboxId).checked = show;
+    });
+    renderAll();
+  });
 }
 
 let filtersWired = false;
