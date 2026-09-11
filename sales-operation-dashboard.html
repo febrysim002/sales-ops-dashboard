@@ -731,7 +731,9 @@ function normalizeOntime(rows){
   const cYear = header.indexOf('year'), cMonth = header.indexOf('month'), cCek = header.indexOf('cek'),
         cStatus = header.indexOf('final status'), cBucket = header.indexOf('late dur'),
         cSoNo = header.indexOf('so_no'), cBuyer = header.indexOf('buyer name'),
-        cDelivery = header.indexOf('so_delivery');
+        // Header reads "SO_Delivery Date" today but has been plain
+        // "SO_Delivery" before — match on the prefix so either spelling works.
+        cDelivery = header.findIndex(h=>h.indexOf('so_delivery')===0);
   const out = [];
   for(let i=1;i<rows.length;i++){
     const r = rows[i];
