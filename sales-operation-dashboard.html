@@ -279,6 +279,11 @@ Chart.register(ChartDataLabels);
 Chart.defaults.set('plugins.datalabels', { display:false });
 
 const SPREADSHEET_ID = "1m-2znh_9e_UHtuwTheWPpytuEZcKY88OaGngVAlBoFw";
+// Restricted to the Sheets API only, and to this dashboard's own site URLs
+// (HTTP referrer restriction) — meant to be public in client code, the same
+// way a Google Maps embed key is. It can only ever read whatever the sheet
+// itself already has shared publicly; it grants no other access.
+const GOOGLE_API_KEY = "AIzaSyC2A2Hxjw5B-CNpwmfT57tz4S0LYwBOSwk";
 const SHEET_NAMES = {
   soValue: "Monthly SO Value (2025 vs 2026)",
   ontime: "Ontime Delivery",
@@ -1401,6 +1406,44 @@ function loadFromBackend(){
   });
 }
 
+// The Sheets API drops trailing empty cells per row instead of padding
+// every row to the sheet's full width the way the old CSV export did —
+// pad them back out so column-index lookups downstream stay safe.
+function padRows(values){
+  if(!values || !values.length) return [];
+  const maxCols = Math.max(...values.map(r=>r.length));
+  return values.map(r=>{
+    const row = r.slice();
+    while(row.length < maxCols) row.push('');
+    return row;
+  });
+}
+
+// Google's real Sheets API (JSON), as opposed to the gviz CSV-export hack
+// below — one batched call for all 5 sheets, authenticated by a public,
+// site-restricted API key. This is what actually fixed the Ontime Delivery
+// sheet coming back truncated: the CSV export was unreliable for a sheet
+// this large, the JSON API isn't. Still needs the sheet to be shared
+// publicly, same as the CSV path — swap to loadFromBackend (service
+// account) if/when the sheet goes private.
+function loadFromSheetsApi(){
+  const sheetKeys = Object.keys(SHEET_NAMES);
+  const params = new URLSearchParams();
+  params.set('key', GOOGLE_API_KEY);
+  sheetKeys.forEach(k => params.append('ranges', "'" + SHEET_NAMES[k] + "'"));
+  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + SPREADSHEET_ID + '/values:batchGet?' + params.toString();
+  return fetch(url, { cache:'no-store' }).then(res=>{
+    if(!res.ok) throw new Error('Sheets API returned HTTP ' + res.status);
+    return res.json();
+  }).then(json=>{
+    const valueRanges = json.valueRanges || [];
+    const out = {};
+    sheetKeys.forEach((key,i)=>{ out[key] = padRows((valueRanges[i]||{}).values || []); });
+    if(!out.soValue.length) throw new Error('Sheets API returned no data');
+    return out;
+  });
+}
+
 function loadData(){
   const statusEl = document.getElementById('status');
   const dashEl = document.getElementById('dashboard');
@@ -1409,9 +1452,10 @@ function loadData(){
   statusEl.style.display = 'block';
   dashEl.style.display = 'none';
 
-  loadFromBackend().catch(()=>
-    // No backend on this host (e.g. GitHub Pages) or it isn't configured
-    // yet — fall back to fetching straight from Google, same as before.
+  loadFromBackend().catch(loadFromSheetsApi).catch(()=>
+    // Last resort: the CSV export directly, same as the very first version
+    // of this dashboard. Kept only as a safety net — it's the path that was
+    // silently truncating on the Ontime Delivery sheet.
     Promise.all([
       fetchSheet(SHEET_NAMES.soValue),
       fetchSheet(SHEET_NAMES.ontime),
