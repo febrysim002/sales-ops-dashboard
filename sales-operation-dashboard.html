@@ -1386,21 +1386,40 @@ function wireAllFilters(){
 
 let filtersWired = false;
 
+// Server-side proxy (Netlify Function) that fetches all 5 sheets in one
+// batched, authenticated call and returns them in the same 2D-array shape
+// the CSV path below produces. Only exists where a Netlify Function can
+// run — resolves/rejects fast on GitHub Pages so loadData() falls back to
+// fetching straight from Google there, same as before.
+function loadFromBackend(){
+  return fetch('/.netlify/functions/sheets-data', { cache:'no-store' }).then(res=>{
+    if(!res.ok) throw new Error('Backend returned HTTP ' + res.status);
+    return res.json();
+  }).then(json=>{
+    if(!json || !Array.isArray(json.soValue)) throw new Error('Backend returned an unexpected payload');
+    return json;
+  });
+}
+
 function loadData(){
   const statusEl = document.getElementById('status');
   const dashEl = document.getElementById('dashboard');
   statusEl.className = 'loading';
-  statusEl.textContent = 'Fetching latest data from Google Sheets…';
+  statusEl.textContent = 'Fetching latest data…';
   statusEl.style.display = 'block';
   dashEl.style.display = 'none';
 
-  Promise.all([
-    fetchSheet(SHEET_NAMES.soValue),
-    fetchSheet(SHEET_NAMES.ontime),
-    fetchSheet(SHEET_NAMES.arAging),
-    fetchSheet(SHEET_NAMES.pipeline),
-    fetchSheet(SHEET_NAMES.newProduct)
-  ]).then(function([soValue, ontime, arAging, pipeline, newProduct]){
+  loadFromBackend().catch(()=>
+    // No backend on this host (e.g. GitHub Pages) or it isn't configured
+    // yet — fall back to fetching straight from Google, same as before.
+    Promise.all([
+      fetchSheet(SHEET_NAMES.soValue),
+      fetchSheet(SHEET_NAMES.ontime),
+      fetchSheet(SHEET_NAMES.arAging),
+      fetchSheet(SHEET_NAMES.pipeline),
+      fetchSheet(SHEET_NAMES.newProduct)
+    ]).then(([soValue, ontime, arAging, pipeline, newProduct])=>({ soValue, ontime, arAging, pipeline, newProduct }))
+  ).then(function({soValue, ontime, arAging, pipeline, newProduct}){
     try{
       DATA = prepareData({ soValue, ontime, arAging, pipeline, newProduct });
       syncFilterUI('comboFrom', 'comboTo', comboFilter, MONTH_NAMES);
