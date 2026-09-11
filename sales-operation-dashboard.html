@@ -24,6 +24,13 @@
   #status.loading{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
   #status.error{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;}
   #dashboard{display:none;}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;}
+  .tab:hover{color:var(--text);}
+  .tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+  .week-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .week-toolbar label{font-size:12px;color:var(--muted);}
+  .week-toolbar select{padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;color:var(--text);}
   .kpi-toolbar{display:flex;justify-content:flex-end;gap:18px;margin-bottom:8px;}
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px;}
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
@@ -101,6 +108,12 @@
   <div id="status" class="loading">Fetching latest data from Google Sheets…</div>
 
   <div id="dashboard">
+    <div class="tabs">
+      <button type="button" class="tab active" data-view="viewMonthly">Monthly</button>
+      <button type="button" class="tab" data-view="viewWeekly">Weekly</button>
+    </div>
+
+    <div id="viewMonthly">
     <div class="kpi-toolbar">
       <label class="lbl-toggle"><input type="checkbox" id="showAllMoneyKpis"> Show monetary values</label>
       <label class="lbl-toggle"><input type="checkbox" id="showAllDataLabels"> Show all data labels</label>
@@ -269,6 +282,96 @@
       </div>
       <div id="rawTables" hidden></div>
     </section>
+    </div>
+
+    <div id="viewWeekly" hidden>
+      <div class="week-toolbar">
+        <label for="weekPick">Week</label>
+        <select id="weekPick"></select>
+        <span class="sep" style="color:var(--muted);font-size:12px;">Mon–Sun · all figures below follow this week</span>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-head"><div class="label">SOs Delivered This Week</div></div>
+          <div class="value" id="wkDelivered">–</div>
+          <div class="sub" id="wkDeliveredSub"></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-head"><div class="label">On-Time Rate This Week</div></div>
+          <div class="value" id="wkOntimePct">–</div>
+          <div class="sub" id="wkOntimeSub"></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-head"><div class="label">Late Deliveries This Week</div></div>
+          <div class="value" id="wkLate">–</div>
+          <div class="sub">unique SO numbers</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-head"><div class="label">AR Due This Week</div></div>
+          <div class="value" id="wkArDue">••••••</div>
+          <div class="sub">balance due in this week</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-head"><div class="label">AR Overdue</div></div>
+          <div class="value" id="wkArOverdue">••••••</div>
+          <div class="sub">due before this week</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-head"><div class="label">New Products This Week</div></div>
+          <div class="value" id="wkNewProducts">–</div>
+          <div class="sub">unique item numbers</div>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="card wide">
+          <div class="card-head">
+            <h2>Delivery Performance by Week</h2>
+            <div class="chart-filter">
+              <select id="wkTrendSpan">
+                <option value="4">Last 4 weeks</option>
+                <option value="8">Last 8 weeks</option>
+                <option value="12" selected>Last 12 weeks</option>
+                <option value="26">Last 26 weeks</option>
+              </select>
+              <div class="ms" id="wkDeliveryBuyerMS"></div>
+              <label class="lbl-toggle"><input type="checkbox" id="wkTrendLabels"> Labels</label>
+            </div>
+          </div>
+          <div class="hint">weeks ending on the selected week · click a bar to jump to that week</div>
+          <div class="chart-wrap"><canvas id="chartWeeklyDelivery"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>AR Aging Schedule</h2>
+            <div class="chart-filter">
+              <div class="ms" id="wkArBuyerMS"></div>
+              <label class="lbl-toggle"><input type="checkbox" id="wkArLabels"> Labels</label>
+            </div>
+          </div>
+          <div class="hint">relative to the selected week</div>
+          <div class="chart-wrap"><canvas id="chartWeeklyAr"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>New Products by Week</h2>
+            <div class="chart-filter">
+              <label class="lbl-toggle"><input type="checkbox" id="wkNewProductLabels"> Labels</label>
+            </div>
+          </div>
+          <div class="hint">unique item numbers introduced per week</div>
+          <div class="chart-wrap"><canvas id="chartWeeklyNewProduct"></canvas></div>
+        </div>
+      </div>
+
+      <section class="raw">
+        <div class="raw-head">
+          <h2 id="weeklyTablesToggle" class="raw-toggle open"><span class="raw-arrow">&#9654;</span> Weekly Detail Tables</h2>
+        </div>
+        <div id="weeklyTables"></div>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -318,6 +421,47 @@ function toNum(v){
   return isNaN(n) ? 0 : n;
 }
 function sum(arr){ return arr.reduce((a,b)=>a+b,0); }
+// Sheet dates arrive as display strings, and this spreadsheet mixes
+// "MM/DD/YYYY" (most sheets) with ISO "YYYY-MM-DD". Returns a local-midnight
+// Date so day comparisons never straddle a timezone boundary, or null.
+function parseSheetDate(v){
+  if(v===undefined || v===null) return null;
+  const s = String(v).trim();
+  if(!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return new Date(+m[1], +m[2]-1, +m[3]);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return new Date(+m[3], +m[1]-1, +m[2]);
+  return null;
+}
+const DAY_MS = 86400000;
+// Monday-start week containing d.
+function weekStartOf(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+function addDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+n); }
+function sameDayOrAfter(a, b){ return a.getTime() >= b.getTime(); }
+function inWeek(date, start){
+  if(!date) return false;
+  return date.getTime() >= start.getTime() && date.getTime() < addDays(start,7).getTime();
+}
+const fmtWeekLabel = (start) => {
+  const end = addDays(start, 6);
+  const d = (x)=> x.getDate();
+  const mo = (x)=> MONTH_NAMES[x.getMonth()];
+  return start.getMonth()===end.getMonth()
+    ? d(start)+'–'+d(end)+' '+mo(end)+' '+end.getFullYear()
+    : d(start)+' '+mo(start)+' – '+d(end)+' '+mo(end)+' '+end.getFullYear();
+};
+const fmtWeekShort = (start) => {
+  const end = addDays(start, 6);
+  const tail = start.getMonth()===end.getMonth()
+    ? String(end.getDate())
+    : MONTH_NAMES[end.getMonth()]+' '+end.getDate();
+  return MONTH_NAMES[start.getMonth()]+' '+start.getDate()+'–'+tail;
+};
 // selected: a Set of exact buyer names, or empty/absent to mean "no filter".
 function matchesBuyer(name, selected){
   return !selected || selected.size===0 || selected.has(name);
@@ -586,7 +730,8 @@ function normalizeOntime(rows){
   const header = (rows[0]||[]).map(h=>String(h||'').trim().toLowerCase());
   const cYear = header.indexOf('year'), cMonth = header.indexOf('month'), cCek = header.indexOf('cek'),
         cStatus = header.indexOf('final status'), cBucket = header.indexOf('late dur'),
-        cSoNo = header.indexOf('so_no'), cBuyer = header.indexOf('buyer name');
+        cSoNo = header.indexOf('so_no'), cBuyer = header.indexOf('buyer name'),
+        cDelivery = header.indexOf('so_delivery');
   const out = [];
   for(let i=1;i<rows.length;i++){
     const r = rows[i];
@@ -596,7 +741,8 @@ function normalizeOntime(rows){
     const month = parseInt(r[cMonth],10);
     const soNo = (r[cSoNo]||'').trim();
     if(!month || !soNo) continue;
-    out.push({ month, status:(r[cStatus]||'').trim(), bucket:(r[cBucket]||'').trim(), soNo, buyer:(r[cBuyer]||'').trim() });
+    out.push({ month, status:(r[cStatus]||'').trim(), bucket:(r[cBucket]||'').trim(), soNo, buyer:(r[cBuyer]||'').trim(),
+               delivered: cDelivery>=0 ? parseSheetDate(r[cDelivery]) : null });
   }
   return out;
 }
@@ -612,7 +758,8 @@ function normalizeArAging(rows){
     if((r[2]||'').trim() !== 'Include') continue;
     const sortKey = (r[4]||'').trim();
     if(!sortKey) continue;
-    out.push({ sort:sortKey, duration:(r[5]||'').trim(), buyer:(r[14]||'').trim(), balance:toNum(r[19]) });
+    out.push({ sort:sortKey, duration:(r[5]||'').trim(), buyer:(r[14]||'').trim(), balance:toNum(r[19]),
+               due: parseSheetDate(r[10]) });
   }
   return out;
 }
@@ -663,6 +810,22 @@ function normalizeNewProduct(rows){
     rowsOut.push({ month:m, label:MONTH_NAMES[m-1], count: monthly[m] ? monthly[m].size : 0 });
   }
   return rowsOut;
+}
+
+// Same sheet as normalizeNewProduct, kept row-per-record so the weekly view
+// can bucket by Posting Date instead of by month.
+function normalizeNewProductRows(rows){
+  const out = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[0]===undefined) continue;
+    if(String(r[0]||'').trim() !== '2026') continue;
+    const item = (r[4]||'').trim();
+    const date = parseSheetDate(r[3]);
+    if(!item || !date) continue;
+    out.push({ item, date });
+  }
+  return out;
 }
 
 // ---- On-demand aggregations (month range + optional buyer set) ----
@@ -765,6 +928,82 @@ function arAgingBuckets(rows, buyers){
 function matchesSet(value, selected){
   return !selected || selected.size===0 || selected.has(value);
 }
+
+// ---- Weekly aggregations (Monday-start weeks) ----
+
+// The n weeks ending with (and including) the week starting at endStart.
+function weekSeries(endStart, n){
+  const out = [];
+  for(let i=n-1;i>=0;i--) out.push(addDays(endStart, -7*i));
+  return out;
+}
+// Unique-SO counts per week, matching the monthly charts' COUNTUNIQUE(SO_No)
+// rule — one SO can span several delivery-order rows.
+function weeklyDelivery(rows, starts, buyers){
+  const ontime = starts.map(()=>new Set());
+  const late = starts.map(()=>new Set());
+  rows.forEach(r=>{
+    if(!r.delivered) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
+    for(let i=0;i<starts.length;i++){
+      if(inWeek(r.delivered, starts[i])){
+        if(r.status==='Late') late[i].add(r.soNo);
+        else if(r.status==='Ontime') ontime[i].add(r.soNo);
+        break;
+      }
+    }
+  });
+  return starts.map((s,i)=>{
+    const o = ontime[i].size, l = late[i].size, total = o+l;
+    return { start:s, label:fmtWeekShort(s), ontime:o, late:l, delivered:total, pct: total>0 ? o/total*100 : null };
+  });
+}
+function weeklyNewProducts(rows, starts){
+  const sets = starts.map(()=>new Set());
+  rows.forEach(r=>{
+    for(let i=0;i<starts.length;i++){
+      if(inWeek(r.date, starts[i])){ sets[i].add(r.item); break; }
+    }
+  });
+  return starts.map((s,i)=>({ start:s, label:fmtWeekShort(s), count:sets[i].size }));
+}
+// Forward-looking AR schedule relative to the selected week: what is already
+// overdue, what falls due this week, next week, and everything beyond.
+function arDueSchedule(rows, weekStart, buyers){
+  const weekEnd = addDays(weekStart, 6);
+  const nextEnd = addDays(weekStart, 13);
+  const out = { overdue:0, thisWeek:0, nextWeek:0, later:0 };
+  rows.forEach(r=>{
+    if(!r.due) return;
+    if(!matchesBuyer(r.buyer, buyers)) return;
+    const t = r.due.getTime();
+    if(t < weekStart.getTime()) out.overdue += r.balance;
+    else if(t <= weekEnd.getTime()) out.thisWeek += r.balance;
+    else if(t <= nextEnd.getTime()) out.nextWeek += r.balance;
+    else out.later += r.balance;
+  });
+  return out;
+}
+function lateByBuyerInRange(rows, startDate, endDateExclusive){
+  const sets = {};
+  rows.forEach(r=>{
+    if(r.status!=='Late' || !r.buyer || !r.delivered) return;
+    const t = r.delivered.getTime();
+    if(t < startDate.getTime() || t >= endDateExclusive.getTime()) return;
+    (sets[r.buyer] || (sets[r.buyer]=new Set())).add(r.soNo);
+  });
+  return Object.keys(sets).map(name=>({ name, count:sets[name].size })).sort((a,b)=>b.count-a.count);
+}
+function arDueByCustomer(rows, startDate, endDateInclusive){
+  const map = {};
+  rows.forEach(r=>{
+    if(!r.due || !r.buyer) return;
+    const t = r.due.getTime();
+    if(t < startDate.getTime() || t > endDateInclusive.getTime()) return;
+    map[r.buyer] = (map[r.buyer]||0) + r.balance;
+  });
+  return Object.keys(map).map(name=>({ name, balance:map[name] })).sort((a,b)=>b.balance-a.balance);
+}
 function arAgingByBuyer(rows, buyers, durations){
   const map = {};
   rows.forEach(r=>{
@@ -820,14 +1059,19 @@ const lateByMonthFilter  = { from: 0, to: Infinity, buyers: new Set() };
 const newProductFilter   = { from: 0, to: Infinity };
 const buyersFilter       = { buyers: new Set() };
 const lateByBuyerFilter  = { buyers: new Set() };
+// Weekly view. weekStart is null until the first render, which pins it to the
+// week containing today; the picker then drives it.
+const weeklyFilter         = { weekStart: null, span: 12 };
+const weeklyDeliveryFilter = { buyers: new Set() };
+const weeklyArFilter       = { buyers: new Set() };
 
 // Per-chart "show compact data labels on the chart itself" toggles.
-const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, agingByBuyer:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false };
+const LABELS = { combo:false, cumulative:false, pipeline:false, aging:false, agingByBuyer:false, buyers:false, lateByMonth:false, lateByBuyer:false, newProduct:false, wkTrend:false, wkAr:false, wkNewProduct:false };
 
 // KPI "show value" masking — only the money-denominated cards are
 // maskable, all controlled by one shared checkbox (#showAllMoneyKpis).
 // Off by default: cards render KPI_MASK until checked.
-const KPI_MONEY_ELEMENTS = ['kpiTotal2026','kpiTotal2026Sub','kpiAR'];
+const KPI_MONEY_ELEMENTS = ['kpiTotal2026','kpiTotal2026Sub','kpiAR','wkArDue','wkArOverdue'];
 const KPI_MASK = '••••••';
 const KPI_TEXT = {};
 const KPI_COLOR = {};
@@ -851,6 +1095,7 @@ function prepareData(sheets){
   const arRows = normalizeArAging(sheets.arAging);
   const pipeline = normalizePipeline(sheets.pipeline);
   const newProduct = normalizeNewProduct(sheets.newProduct);
+  const newProductRows = normalizeNewProductRows(sheets.newProduct);
   const nameSet = new Set();
   soRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
   ontimeRows.forEach(r=>{ if(r.buyer) nameSet.add(r.buyer); });
@@ -860,7 +1105,7 @@ function prepareData(sheets){
   arRows.forEach(r=>{ if(r.sort && !durationMap[r.sort]) durationMap[r.sort] = r.duration; });
   const arDurationOptions = Object.keys(durationMap).sort().map(k=>durationMap[k]);
   const pipelineYears = Object.keys(pipelineSeriesByYear(pipeline, null)).sort((a,b)=>Number(a)-Number(b));
-  return { soRows, ontimeRows, arRows, pipeline, newProduct, allBuyerNames: [...nameSet].sort(), arDurationOptions, pipelineYears };
+  return { soRows, ontimeRows, arRows, pipeline, newProduct, newProductRows, allBuyerNames: [...nameSet].sort(), arDurationOptions, pipelineYears };
 }
 
 function byIndexRange(rows, state){
@@ -1276,6 +1521,192 @@ function renderRawTables(){
     [...arAgingByBuyer(DATA.arRows, null)].sort((a,b)=>b.balance-a.balance).map(r=>({ 'Buyer Name':r.name, 'Balance Due':fmtUSD.format(r.balance) })));
 }
 
+// ---------------------------------------------------------------------
+// Weekly view. Everything here keys off weeklyFilter.weekStart (a Monday);
+// the source sheets are row-per-record with real dates, so the weekly cut is
+// computed client-side from the same data the monthly charts use.
+// ---------------------------------------------------------------------
+
+// Weeks offered in the picker: every week from the earliest dated record up to
+// the week containing today, newest first.
+function availableWeekStarts(){
+  const dates = [];
+  DATA.ontimeRows.forEach(r=>{ if(r.delivered) dates.push(r.delivered); });
+  DATA.newProductRows.forEach(r=>{ dates.push(r.date); });
+  const todayWeek = weekStartOf(new Date());
+  let earliest = dates.length ? weekStartOf(new Date(Math.min(...dates.map(d=>d.getTime())))) : addDays(todayWeek, -7*25);
+  // Cap the list so a stray old record can't produce thousands of options.
+  const floor = addDays(todayWeek, -7*103);
+  if(earliest.getTime() < floor.getTime()) earliest = floor;
+  const out = [];
+  for(let w = todayWeek; w.getTime() >= earliest.getTime(); w = addDays(w, -7)) out.push(w);
+  return out;
+}
+
+function syncWeekPicker(){
+  const weeks = availableWeekStarts();
+  if(!weeklyFilter.weekStart) weeklyFilter.weekStart = weeks[0];
+  // Keep the pinned week valid across refreshes.
+  if(!weeks.some(w=>w.getTime()===weeklyFilter.weekStart.getTime())) weeklyFilter.weekStart = weeks[0];
+  const sel = document.getElementById('weekPick');
+  sel.innerHTML = '';
+  weeks.forEach(w=>{
+    const o = document.createElement('option');
+    o.value = String(w.getTime());
+    o.textContent = fmtWeekLabel(w);
+    sel.appendChild(o);
+  });
+  sel.value = String(weeklyFilter.weekStart.getTime());
+}
+
+function renderWeeklyKPIs(){
+  const start = weeklyFilter.weekStart;
+  const week = weeklyDelivery(DATA.ontimeRows, [start], null)[0];
+  const ar = arDueSchedule(DATA.arRows, start, null);
+  const np = weeklyNewProducts(DATA.newProductRows, [start])[0];
+
+  setKpi('wkArDue', fmtUSDCompact.format(ar.thisWeek));
+  setKpi('wkArOverdue', fmtUSDCompact.format(ar.overdue));
+  applyKpiVisibility();
+
+  document.getElementById('wkDelivered').textContent = String(week.delivered);
+  document.getElementById('wkDeliveredSub').textContent = fmtWeekLabel(start);
+  const pctEl = document.getElementById('wkOntimePct');
+  pctEl.textContent = fmtPct(week.pct);
+  pctEl.style.color = week.pct===null ? 'inherit' : (week.pct>=70?PALETTE.green:week.pct>=40?PALETTE.amber:PALETTE.rose);
+  document.getElementById('wkOntimeSub').textContent = week.ontime+' ontime / '+week.late+' late';
+  document.getElementById('wkLate').textContent = String(week.late);
+  document.getElementById('wkNewProducts').textContent = String(np.count);
+}
+
+function renderWeeklyDelivery(){
+  const starts = weekSeries(weeklyFilter.weekStart, weeklyFilter.span);
+  const rows = weeklyDelivery(DATA.ontimeRows, starts, weeklyDeliveryFilter.buyers);
+  const fs = labelFontSize(rows.length);
+  newChart('chartWeeklyDelivery', {
+    data:{ labels: rows.map(r=>r.label), datasets:[
+      { type:'bar', label:'Ontime', data: rows.map(r=>r.ontime), backgroundColor:PALETTE.teal, stack:'d', order:2 },
+      { type:'bar', label:'Late', data: rows.map(r=>r.late), backgroundColor:PALETTE.rose, stack:'d', order:2 },
+      { type:'line', label:'Ontime %', data: rows.map(r=>r.pct), borderColor:PALETTE.blue, backgroundColor:PALETTE.blue,
+        tension:.3, spanGaps:false, pointRadius:3, yAxisID:'y1', order:1 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      onClick:(evt, els)=>{ if(els.length){ weeklyFilter.weekStart = rows[els[0].index].start; setTimeout(renderWeekly,0); } },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        tooltip:{ filter: hideZeroTooltip, callbacks:{
+          label:(ctx)=> ctx.dataset.label==='Ontime %'
+            ? 'Ontime %: ' + (ctx.parsed.y===null?'–':ctx.parsed.y.toFixed(1)+'%')
+            : ctx.dataset.label+': '+ctx.parsed.y
+        }},
+        datalabels:{
+          display: ctx => LABELS.wkTrend && ctx.dataset.data[ctx.dataIndex]!==0 && ctx.dataset.data[ctx.dataIndex]!==null,
+          formatter:(v,ctx)=> ctx.dataset.label==='Ontime %' ? v.toFixed(0)+'%' : v,
+          font:{ size:fs, weight:'600' },
+          color: ctx => ctx.dataset.label==='Ontime %' ? '#1f2937' : '#fff',
+          anchor: ctx => ctx.dataset.label==='Ontime %' ? 'end' : 'center',
+          align: ctx => ctx.dataset.label==='Ontime %' ? 'top' : 'center'
+        }
+      },
+      scales:{
+        x:{ stacked:true },
+        y:{ stacked:true, beginAtZero:true, grace:'8%', title:{ display:true, text:'SOs delivered' } },
+        y1:{ position:'right', beginAtZero:true, max:100, grid:{ drawOnChartArea:false },
+             ticks:{ callback:v=>v+'%' }, title:{ display:true, text:'Ontime %' } }
+      }
+    }
+  });
+}
+
+function renderWeeklyAr(){
+  const s = arDueSchedule(DATA.arRows, weeklyFilter.weekStart, weeklyArFilter.buyers);
+  const labels = ['Overdue','Due this week','Due next week','Due 1+ month ahead'];
+  const values = [s.overdue, s.thisWeek, s.nextWeek, s.later];
+  const colors = [PALETTE.rose, PALETTE.amber, PALETTE.sky, PALETTE.slate];
+  const fs = labelFontSize(values.length);
+  newChart('chartWeeklyAr', {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Balance Due', data:values, backgroundColor:colors }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right:36 } },
+      plugins:{
+        legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>fmtUSD.format(ctx.parsed.x) } },
+        datalabels:{
+          display: ctx => LABELS.wkAr && ctx.dataset.data[ctx.dataIndex]!==0,
+          formatter: v=>fmtUSDCompact.format(v),
+          font:{ size:fs, weight:'600' }, color:'#1f2937',
+          anchor: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).anchor,
+          align: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).align,
+          offset: ctx => hBarLabelPlacement(ctx, fs, fmtUSDCompact.format(ctx.dataset.data[ctx.dataIndex])).offset
+        }
+      },
+      scales:{ x:{ beginAtZero:true, grace:'8%', ticks:{ callback:v=>fmtUSDCompact.format(v) } } }
+    }
+  });
+}
+
+function renderWeeklyNewProduct(){
+  const starts = weekSeries(weeklyFilter.weekStart, weeklyFilter.span);
+  const rows = weeklyNewProducts(DATA.newProductRows, starts);
+  const fs = labelFontSize(rows.length);
+  newChart('chartWeeklyNewProduct', {
+    type:'bar',
+    data:{ labels: rows.map(r=>r.label), datasets:[
+      { label:'New items', data: rows.map(r=>r.count), backgroundColor:PALETTE.violet }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        datalabels:{
+          display: ctx => LABELS.wkNewProduct && ctx.dataset.data[ctx.dataIndex]!==0,
+          font:{ size:fs, weight:'600' }, color:'#1f2937',
+          anchor: ctx => vBarLabelFits(ctx, fs) ? 'center' : 'end',
+          align: ctx => vBarLabelFits(ctx, fs) ? 'center' : 'top',
+          offset: ctx => vBarLabelFits(ctx, fs) ? 0 : 4
+        }
+      },
+      scales:{ y:{ beginAtZero:true, grace:'8%', ticks:{ precision:0 } } }
+    }
+  });
+}
+
+function renderWeeklyTables(){
+  const container = document.getElementById('weeklyTables');
+  container.innerHTML = '';
+  const start = weeklyFilter.weekStart;
+  const last4 = weekSeries(start, 4);
+
+  const delivery = weeklyDelivery(DATA.ontimeRows, last4, null);
+  renderRawTable(container, 'wkDeliveryTable', 'Delivery Performance — Last 4 Weeks',
+    ['Week','Delivered','Ontime','Late','Ontime %'],
+    [...delivery].reverse().map(r=>({ 'Week':fmtWeekLabel(r.start), 'Delivered':r.delivered, 'Ontime':r.ontime, 'Late':r.late, 'Ontime %':fmtPct(r.pct) })));
+
+  const lateRows = lateByBuyerInRange(DATA.ontimeRows, last4[0], addDays(start, 7));
+  renderRawTable(container, 'wkLateByBuyer', 'Late Deliveries by Buyer — Last 4 Weeks',
+    ['Buyer Name','Late SOs'],
+    lateRows.map(r=>({ 'Buyer Name':r.name, 'Late SOs':r.count })));
+
+  const dueRows = arDueByCustomer(DATA.arRows, start, addDays(start, 13)).slice(0, TOP_N_DEFAULT);
+  renderRawTable(container, 'wkArByCustomer', 'Top Customers — Due Within 2 Weeks',
+    ['Customer Name','Balance Due'],
+    dueRows.map(r=>({ 'Customer Name':r.name, 'Balance Due':fmtUSD.format(r.balance) })));
+
+  const np = weeklyNewProducts(DATA.newProductRows, last4);
+  renderRawTable(container, 'wkNewProductTable', 'New Products — Last 4 Weeks',
+    ['Week','New Items'],
+    [...np].reverse().map(r=>({ 'Week':fmtWeekLabel(r.start), 'New Items':r.count })));
+}
+
+function renderWeekly(){
+  syncWeekPicker();
+  renderWeeklyKPIs();
+  renderWeeklyDelivery();
+  renderWeeklyAr();
+  renderWeeklyNewProduct();
+  renderWeeklyTables();
+}
+
 function renderAll(){
   renderKPIs();
   renderCombo();
@@ -1288,6 +1719,7 @@ function renderAll(){
   renderLateByBuyer();
   renderNewProduct();
   renderRawTables();
+  renderWeekly();
 }
 
 function showFetchError(detail){
@@ -1368,6 +1800,21 @@ function wireAllFilters(){
   wireLabelToggle('lateByMonthLabels', 'lateByMonth', renderLateByMonth);
   wireLabelToggle('lateByBuyerLabels', 'lateByBuyer', renderLateByBuyer);
   wireLabelToggle('newProductLabels', 'newProduct', renderNewProduct);
+
+  MS.wkDeliveryBuyer = createBuyerMultiSelect('wkDeliveryBuyerMS', DATA.allBuyerNames, weeklyDeliveryFilter, renderWeeklyDelivery);
+  MS.wkArBuyer = createBuyerMultiSelect('wkArBuyerMS', DATA.allBuyerNames, weeklyArFilter, renderWeeklyAr);
+  document.getElementById('weekPick').addEventListener('change', e=>{
+    weeklyFilter.weekStart = new Date(Number(e.target.value));
+    renderWeekly();
+  });
+  document.getElementById('wkTrendSpan').addEventListener('change', e=>{
+    weeklyFilter.span = parseInt(e.target.value,10);
+    renderWeeklyDelivery();
+    renderWeeklyNewProduct();
+  });
+  wireLabelToggle('wkTrendLabels', 'wkTrend', renderWeeklyDelivery);
+  wireLabelToggle('wkArLabels', 'wkAr', renderWeeklyAr);
+  wireLabelToggle('wkNewProductLabels', 'wkNewProduct', renderWeeklyNewProduct);
 
   document.getElementById('showAllMoneyKpis').addEventListener('change', applyKpiVisibility);
 
@@ -1491,6 +1938,23 @@ function loadData(){
     showFetchError(err.message || String(err));
   });
 }
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b===btn));
+    ['viewMonthly','viewWeekly'].forEach(id=>{
+      document.getElementById(id).hidden = (id !== btn.dataset.view);
+    });
+    // Chart.js sizes canvases from their rendered box, so any chart drawn
+    // while its tab was hidden comes back 0-height — re-render on reveal.
+    if(btn.dataset.view==='viewWeekly' && DATA) renderWeekly();
+  });
+});
+document.getElementById('weeklyTablesToggle').addEventListener('click', ()=>{
+  const t = document.getElementById('weeklyTables');
+  t.hidden = !t.hidden;
+  document.getElementById('weeklyTablesToggle').classList.toggle('open', !t.hidden);
+});
 
 document.getElementById('refreshBtn').addEventListener('click', loadData);
 document.getElementById('collapseAllRaw').addEventListener('click', ()=>{
